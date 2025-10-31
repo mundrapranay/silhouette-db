@@ -43,6 +43,20 @@ test:
 	@echo "Running tests..."
 	$(GOTEST) -v ./...
 
+# Run benchmarks
+bench:
+	@echo "Running benchmarks..."
+	$(GOTEST) -bench=. -benchmem -run=^$$ ./...
+
+# Run benchmarks for a specific package
+bench-store:
+	@echo "Running Store benchmarks..."
+	$(GOTEST) -bench=. -benchmem -run=^$$ ./internal/store/...
+
+bench-server:
+	@echo "Running Server benchmarks..."
+	$(GOTEST) -bench=. -benchmem -run=^$$ ./internal/server/...
+
 # Format code
 fmt:
 	@echo "Formatting code..."
