@@ -11,6 +11,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	apiv1 "github.com/mundrapranay/silhouette-db/api/v1"
 	"github.com/mundrapranay/silhouette-db/internal/crypto"
 	"github.com/mundrapranay/silhouette-db/internal/server"
 	"github.com/mundrapranay/silhouette-db/internal/store"

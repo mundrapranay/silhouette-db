@@ -20,8 +20,8 @@ PROTO_OUT=api/v1
 # Generate Protocol Buffer code
 proto:
 	@echo "Generating Protocol Buffer code..."
-	$(PROTOC) --go_out=$(PROTO_OUT) --go_opt=paths=source_relative \
-		--go-grpc_out=$(PROTO_OUT) --go-grpc_opt=paths=source_relative \
+	$(PROTOC) --go_out=$(PROTO_DIR) --go_opt=paths=source_relative \
+		--go-grpc_out=$(PROTO_DIR) --go-grpc_opt=paths=source_relative \
 		$(PROTO_FILE)
 	@echo "Protocol Buffer code generated"
 

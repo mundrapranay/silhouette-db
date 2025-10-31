@@ -7,6 +7,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	apiv1 "github.com/mundrapranay/silhouette-db/api/v1"
 	"github.com/mundrapranay/silhouette-db/internal/crypto"
 )
 
@@ -20,7 +21,7 @@ type Client struct {
 
 // NewClient creates a new client connection to a silhouette-db server.
 func NewClient(serverAddr string, pirClient crypto.PIRClient) (*Client, error) {
-	conn, err := grpc.NewClient(serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to server: %w", err)
 	}

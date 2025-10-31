@@ -8,6 +8,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	apiv1 "github.com/mundrapranay/silhouette-db/api/v1"
 	"github.com/mundrapranay/silhouette-db/internal/crypto"
 	"github.com/mundrapranay/silhouette-db/internal/store"
 )
@@ -86,7 +87,12 @@ func (s *Server) PublishValues(ctx context.Context, req *apiv1.PublishValuesRequ
 
 	// Record worker's contribution
 	roundState.mu.Lock()
-	roundState.workerData[req.WorkerId] = req.Pairs
+	// Convert []*KeyValuePair to []KeyValuePair
+	pairs := make([]apiv1.KeyValuePair, len(req.Pairs))
+	for i, p := range req.Pairs {
+		pairs[i] = *p
+	}
+	roundState.workerData[req.WorkerId] = pairs
 	numWorkers := len(roundState.workerData)
 	roundState.mu.Unlock()
 
@@ -96,7 +102,8 @@ func (s *Server) PublishValues(ctx context.Context, req *apiv1.PublishValuesRequ
 		roundState.mu.Lock()
 		allPairs := make(map[string][]byte)
 		for _, pairs := range roundState.workerData {
-			for _, pair := range pairs {
+			for i := range pairs {
+				pair := &pairs[i]
 				allPairs[pair.Key] = pair.Value
 			}
 		}
