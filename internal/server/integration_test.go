@@ -43,8 +43,7 @@ func setupTestServerWithGRPC(t *testing.T) (*grpc.Server, *Server, *store.Store,
 	}
 
 	okvsEncoder := &mockOKVSEncoder{}
-	pirServer := &mockPIRServer{}
-	server := NewServer(s, okvsEncoder, pirServer)
+	server := NewServer(s, okvsEncoder)
 
 	// Start gRPC server on random port
 	lis, err := net.Listen("tcp", "127.0.0.1:0")

@@ -1,0 +1,16 @@
+language = "C"
+header = """
+/* WARNING: This file is auto-generated. Do not edit manually. */
+"""
+include_guard = "FRODOPIR_FFI_H"
+autogen_warning = "/* WARNING: This file is auto-generated. Do not edit manually. */"
+pragma_once = true
+
+[parse]
+parse_deps = true
+include = ["frodo-pir"]
+
+[export]
+exclude = [".*"]
+include = ["FrodoPIRShard", "FrodoPIRQueryParams", "FrodoPIRServer", "FrodoPIRClient"]
+

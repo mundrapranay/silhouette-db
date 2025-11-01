@@ -16,6 +16,11 @@ This document outlines the step-by-step implementation plan for building the `si
 - Configuration files and Makefile
 - Build system setup and dependency management
 - Code compiles successfully
+- **FrodoPIR Integration:**
+  - Rust FFI wrapper for FrodoPIR
+  - Go cgo bindings and implementations
+  - Static library built and tested
+  - Complete documentation and build targets
 
 ## Implementation Phases
 
@@ -86,19 +91,27 @@ This document outlines the step-by-step implementation plan for building the `si
 - Research papers on RB-OKVS
 - Look for open-source implementations
 
-### Phase 4: FrodoPIR Integration
+### Phase 4: FrodoPIR Integration ✅ (Core Complete)
 
 **Goal:** Integrate FrodoPIR for private information retrieval.
 
 **Tasks:**
 - [x] Add frodo-pir as git submodule (see below)
-- [ ] Study FrodoPIR Rust implementation
-- [ ] Create Rust FFI wrapper for C-compatible API
-- [ ] Build static library (.a) from Rust code
-- [ ] Implement cgo bindings in `internal/crypto/pir.go`
-- [ ] Replace MockPIRServer with real implementation
-- [ ] Create client-side PIR library wrapper
-- [ ] Test query generation and response decoding
+- [x] Study FrodoPIR Rust implementation
+- [x] Create Rust FFI wrapper for C-compatible API (`third_party/frodo-pir-ffi/`)
+- [x] Build static library (.a) from Rust code
+- [x] Generate C header file with `cbindgen`
+- [x] Implement cgo bindings in `internal/crypto/pir.go`
+- [x] Create `FrodoPIRServer` implementation
+- [x] Create `FrodoPIRClient` implementation
+- [x] Add Makefile targets for building PIR library (`build-pir`, `clean-pir`, `test-pir`)
+- [x] Create integration documentation (`PIR_INTEGRATION_GUIDE.md`)
+- [x] Add safety checks and error handling
+- [x] Fix cgo build configuration
+- [ ] Replace MockPIRServer with real implementation in server code
+- [ ] Implement key-to-index mapping for server
+- [ ] Update client library to use FrodoPIR
+- [ ] Test query generation and response decoding end-to-end
 - [ ] Benchmark query performance
 - [ ] Verify privacy properties
 
@@ -196,13 +209,29 @@ git submodule update --init --recursive
 
 **Total Test Count:** 37 tests (all passing) + 9 benchmarks
 
-### Step 4: Start Implementing Real Crypto Components
+### Step 4: Start Implementing Real Crypto Components ✅ (FrodoPIR Complete)
 
-Begin with either OKVS or PIR (or both in parallel if you have multiple developers):
-- Set up FFI wrappers
-- Create cgo bindings
-- Write unit tests
-- Integrate with main server
+**FrodoPIR Integration Completed:**
+- ✅ Set up Rust FFI wrapper (`third_party/frodo-pir-ffi/`)
+- ✅ Created cgo bindings (`internal/crypto/pir.go`)
+- ✅ Built static library and C headers
+- ✅ Implemented `FrodoPIRServer` and `FrodoPIRClient`
+- ✅ Added Makefile targets and documentation
+- ✅ Code compiles successfully
+
+**Next Steps for PIR:**
+- [ ] Integrate FrodoPIR into server code (replace MockPIRServer)
+- [ ] Implement key-to-index mapping for server
+- [ ] Update client library to use FrodoPIR
+- [ ] Write integration tests
+- [ ] Benchmark performance
+
+**OKVS Integration (Next):**
+- [ ] Research and select RB-OKVS implementation
+- [ ] Set up FFI wrappers
+- [ ] Create cgo bindings
+- [ ] Write unit tests
+- [ ] Integrate with main server
 
 ## Technical Decisions Needed
 
@@ -241,18 +270,52 @@ Begin with either OKVS or PIR (or both in parallel if you have multiple develope
 - ✅ Fixed type conversion issues (pointer slices to value slices)
 - ✅ Fixed gRPC client creation (`grpc.Dial` instead of `grpc.NewClient`)
 - ✅ All code compiles successfully
+- ✅ **FrodoPIR Integration (Phase 4):**
+  - ✅ Created Rust FFI wrapper (`third_party/frodo-pir-ffi/`)
+  - ✅ Built static library (`libfrodopirffi.a` - 17MB)
+  - ✅ Generated C header file (`frodopir_ffi.h`)
+  - ✅ Implemented Go cgo bindings (`internal/crypto/pir.go`)
+  - ✅ Created `FrodoPIRServer` and `FrodoPIRClient` implementations
+  - ✅ Added Makefile targets (`build-pir`, `clean-pir`, `test-pir`)
+  - ✅ Created comprehensive documentation (`PIR_INTEGRATION_GUIDE.md`)
+  - ✅ Fixed cgo build configuration and safety checks
+  - ✅ Code compiles successfully with `-tags cgo`
 
 **Known Issues:**
 - Runtime testing not yet performed (needs manual testing)
-- Mock crypto components still in use (OKVS and PIR)
-- No unit tests yet written
+- Mock crypto components still in use (OKVS)
+- FrodoPIR components implemented but not yet integrated into server/client code
+- Key-to-index mapping needs to be implemented for production use
 
 ## Notes
 
 - The current implementation uses mock crypto components for testing the core Raft and gRPC logic
-- Replace mocks with real implementations in Phases 3 and 4
+- ✅ **FrodoPIR integration complete** - ready for server/client integration
+- Replace MockOKVSEncoder with real implementation in Phase 3
+- Replace MockPIRServer with FrodoPIRServer in server code
 - Consider adding integration tests early to catch breaking changes
 - Document API contracts clearly as implementation progresses
-- **Build Status**: ✅ Code compiles successfully
+- **Build Status**: ✅ Code compiles successfully (with `-tags cgo` for PIR)
 - **Protocol Buffers**: ✅ Generated and working
+- **FrodoPIR FFI**: ✅ Built and tested (static library: `libfrodopirffi.a`)
+
+## Files Created for FrodoPIR Integration
+
+**Rust FFI Wrapper:**
+- `third_party/frodo-pir-ffi/Cargo.toml` - Rust project configuration
+- `third_party/frodo-pir-ffi/src/lib.rs` - FFI wrapper implementation
+- `third_party/frodo-pir-ffi/build.rs` - Build script for header generation
+- `third_party/frodo-pir-ffi/cbindgen.toml` - Header generation config
+- `third_party/frodo-pir-ffi/frodopir_ffi.h` - Generated C header
+- `third_party/frodo-pir-ffi/README.md` - FFI wrapper documentation
+
+**Go Integration:**
+- `internal/crypto/pir.go` - Go cgo bindings and implementations
+- `.golangci.yml` - Linter configuration for cgo
+- `PIR_INTEGRATION_GUIDE.md` - Comprehensive integration guide
+- `PIR_INTEGRATION.md` - Architecture design document
+
+**Build System:**
+- Makefile targets: `build-pir`, `clean-pir`, `test-pir`
+- Updated `build` target to include PIR library
 

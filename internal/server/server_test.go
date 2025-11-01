@@ -61,8 +61,7 @@ func setupTestServer(t *testing.T) (*Server, *store.Store) {
 	}
 
 	okvsEncoder := &mockOKVSEncoder{}
-	pirServer := &mockPIRServer{}
-	server := NewServer(s, okvsEncoder, pirServer)
+	server := NewServer(s, okvsEncoder)
 
 	return server, s
 }

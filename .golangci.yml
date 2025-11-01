@@ -1,0 +1,31 @@
+# GolangCI-Lint configuration for cgo projects
+# This file helps suppress cgo-related linting errors
+
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - typecheck
+    - unused
+
+linters-settings:
+  typecheck:
+    # Allow cgo errors in type checking
+    # These are expected when linter runs without C headers available
+    allow_cgo: true
+
+issues:
+  # Exclude cgo-related errors that can't be resolved by the linter
+  exclude-rules:
+    - path: internal/crypto/pir.go
+      text: "undefined.*C\\."
+      linters:
+        - typecheck
+    - path: internal/crypto/pir.go
+      text: "go list failed"
+      linters:
+        - typecheck
+

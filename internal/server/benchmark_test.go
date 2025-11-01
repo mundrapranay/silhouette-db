@@ -43,8 +43,7 @@ func setupBenchServer(b *testing.B) (*grpc.Server, *Server, *store.Store, string
 	}
 
 	okvsEncoder := &mockOKVSEncoder{}
-	pirServer := &mockPIRServer{}
-	server := NewServer(s, okvsEncoder, pirServer)
+	server := NewServer(s, okvsEncoder)
 
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

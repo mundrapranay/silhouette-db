@@ -63,12 +63,12 @@ func main() {
 	}
 
 	// Initialize cryptographic components
-	// TODO: Replace with actual implementations
+	// TODO: Replace OKVS with actual implementation
 	okvsEncoder := &crypto.MockOKVSEncoder{}
-	pirServer := &crypto.MockPIRServer{}
+	// Note: PIR server is now created per round in server.PublishValues
 
 	// Create gRPC server
-	grpcServer := server.NewServer(s, okvsEncoder, pirServer)
+	grpcServer := server.NewServer(s, okvsEncoder)
 
 	// Start gRPC server
 	lis, err := net.Listen("tcp", *grpcAddr)

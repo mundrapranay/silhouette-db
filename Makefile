@@ -25,37 +25,70 @@ proto:
 		$(PROTO_FILE)
 	@echo "Protocol Buffer code generated"
 
+# Rust/FrodoPIR build targets
+PIR_FFI_DIR := third_party/frodo-pir-ffi
+
+build-pir:
+	@echo "Building FrodoPIR FFI library..."
+	@cd $(PIR_FFI_DIR) && cargo build --release
+	@echo "FrodoPIR FFI library built"
+
+clean-pir:
+	@echo "Cleaning FrodoPIR FFI library..."
+	@cd $(PIR_FFI_DIR) && cargo clean
+	@echo "FrodoPIR FFI library cleaned"
+
+test-pir:
+	@echo "Testing FrodoPIR FFI library..."
+	@cd $(PIR_FFI_DIR) && cargo test --release
+	@echo "FrodoPIR FFI library tests passed"
+
 # Download dependencies
 deps:
 	@echo "Downloading dependencies..."
 	$(GOMOD) download
 	$(GOMOD) tidy
 
-# Build the project
-build: proto
+# Build the project (requires PIR library)
+build: proto build-pir
 	@echo "Building $(BINARY_NAME)..."
 	@mkdir -p $(BINARY_DIR)
-	$(GOBUILD) -o $(BINARY_DIR)/$(BINARY_NAME) ./cmd/silhouette-server
+	$(GOBUILD) -tags cgo -o $(BINARY_DIR)/$(BINARY_NAME) ./cmd/silhouette-server
 	@echo "Build complete: $(BINARY_DIR)/$(BINARY_NAME)"
 
-# Run tests
+# Run tests (with cgo for PIR)
 test:
 	@echo "Running tests..."
+	$(GOTEST) -tags cgo -v ./...
+
+# Run tests without cgo (faster, but skips PIR tests)
+test-no-cgo:
+	@echo "Running tests (no cgo)..."
 	$(GOTEST) -v ./...
 
-# Run benchmarks
+# Run PIR integration tests
+test-pir-integration:
+	@echo "Running PIR integration tests..."
+	$(GOTEST) -tags cgo -v ./internal/server/... -run TestPIRIntegration
+
+# Run benchmarks (with cgo for PIR)
 bench:
 	@echo "Running benchmarks..."
-	$(GOTEST) -bench=. -benchmem -run=^$$ ./...
+	$(GOTEST) -tags cgo -bench=. -benchmem -run=^$$ ./...
 
 # Run benchmarks for a specific package
 bench-store:
 	@echo "Running Store benchmarks..."
-	$(GOTEST) -bench=. -benchmem -run=^$$ ./internal/store/...
+	$(GOTEST) -tags cgo -bench=. -benchmem -run=^$$ ./internal/store/...
 
 bench-server:
 	@echo "Running Server benchmarks..."
-	$(GOTEST) -bench=. -benchmem -run=^$$ ./internal/server/...
+	$(GOTEST) -tags cgo -bench=. -benchmem -run=^$$ ./internal/server/...
+
+# Run PIR benchmarks
+bench-pir:
+	@echo "Running PIR benchmarks..."
+	$(GOTEST) -tags cgo -bench=BenchmarkPIR -benchmem -run=^$$ ./internal/server/...
 
 # Format code
 fmt:

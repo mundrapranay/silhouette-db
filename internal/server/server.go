@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 
 	"google.golang.org/grpc/codes"
@@ -19,12 +20,16 @@ type Server struct {
 
 	store       *store.Store
 	okvsEncoder crypto.OKVSEncoder
-	pirServer   crypto.PIRServer
 
 	// Round management
 	roundsMu        sync.RWMutex
 	roundData       map[uint64]*roundState
 	expectedWorkers map[uint64]int32
+
+	// FrodoPIR servers per round
+	pirServers      map[uint64]*crypto.FrodoPIRServer
+	roundBaseParams map[uint64][]byte         // BaseParams for each round (for client distribution)
+	roundKeyMapping map[uint64]map[string]int // key-to-index mapping per round
 }
 
 // roundState tracks the state of a round during the publish phase.
@@ -35,13 +40,15 @@ type roundState struct {
 }
 
 // NewServer creates a new gRPC server instance.
-func NewServer(s *store.Store, okvsEncoder crypto.OKVSEncoder, pirServer crypto.PIRServer) *Server {
+func NewServer(s *store.Store, okvsEncoder crypto.OKVSEncoder) *Server {
 	return &Server{
 		store:           s,
 		okvsEncoder:     okvsEncoder,
-		pirServer:       pirServer,
 		roundData:       make(map[uint64]*roundState),
 		expectedWorkers: make(map[uint64]int32),
+		pirServers:      make(map[uint64]*crypto.FrodoPIRServer),
+		roundBaseParams: make(map[uint64][]byte),
+		roundKeyMapping: make(map[uint64]map[string]int),
 	}
 }
 
@@ -110,13 +117,66 @@ func (s *Server) PublishValues(ctx context.Context, req *apiv1.PublishValuesRequ
 		roundState.complete = true
 		roundState.mu.Unlock()
 
-		// Encode using OKVS
+		// Create key-to-index mapping (ordered by key for consistency)
+		keys := make([]string, 0, len(allPairs))
+		for k := range allPairs {
+			keys = append(keys, k)
+		}
+		// Sort keys for deterministic ordering
+		sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+
+		keyToIndex := make(map[string]int)
+		for i, k := range keys {
+			keyToIndex[k] = i
+		}
+
+		// Encode using OKVS (for backward compatibility)
 		okvsBlob, err := s.okvsEncoder.Encode(allPairs)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to encode OKVS: %v", err)
 		}
 
-		// Store in Raft cluster
+		// Create FrodoPIR server for this round
+		// Calculate elemSize based on actual data (max value size in BYTES)
+		// Note: FrodoPIR expects elemSize in BITS, and decodes base64 to bytes
+		// Base64 encoding increases size by ~33%, so we need to account for that
+		maxValueBytes := 0
+		for _, v := range allPairs {
+			if len(v) > maxValueBytes {
+				maxValueBytes = len(v)
+			}
+		}
+
+		// Ensure minimum size (64 bytes = 512 bits)
+		// Round up to next power of 2 for efficiency
+		if maxValueBytes < 64 {
+			maxValueBytes = 64
+		}
+		// Round up to next power of 2
+		elemSizeBytes := 64
+		for elemSizeBytes < maxValueBytes {
+			elemSizeBytes *= 2
+		}
+
+		// Parameters: lweDim=512 for small databases, plaintextBits=10
+		// elemSize is in BITS (library expects bits)
+		lweDim := 512
+		elemSizeBits := elemSizeBytes * 8 // Convert bytes to bits
+		plaintextBits := 10
+
+		pirServer, baseParams, err := crypto.NewFrodoPIRServer(allPairs, lweDim, elemSizeBits, plaintextBits)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to create FrodoPIR server: %v", err)
+		}
+
+		// Store FrodoPIR server and metadata
+		s.roundsMu.Lock()
+		s.pirServers[req.RoundId] = pirServer
+		s.roundBaseParams[req.RoundId] = baseParams
+		s.roundKeyMapping[req.RoundId] = keyToIndex
+		s.roundsMu.Unlock()
+
+		// Store in Raft cluster (OKVS blob for backward compatibility)
 		roundKey := fmt.Sprintf("round_%d_results", req.RoundId)
 		if err := s.store.Set(roundKey, okvsBlob); err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to store round data: %v", err)
@@ -134,18 +194,66 @@ func (s *Server) GetValue(ctx context.Context, req *apiv1.GetValueRequest) (*api
 		return nil, status.Errorf(codes.FailedPrecondition, "not the leader")
 	}
 
-	// Retrieve the OKVS blob for this round
-	roundKey := fmt.Sprintf("round_%d_results", req.RoundId)
-	okvsBlob, exists := s.store.Get(roundKey)
+	s.roundsMu.RLock()
+	pirServer, exists := s.pirServers[req.RoundId]
+	s.roundsMu.RUnlock()
+
 	if !exists {
 		return nil, status.Errorf(codes.NotFound, "round %d results not found", req.RoundId)
 	}
 
-	// Process PIR query
-	pirResponse, err := s.pirServer.ProcessQuery(okvsBlob, req.PirQuery)
+	// Process PIR query using FrodoPIR server
+	// Note: db parameter is not used, shard already contains the database
+	pirResponse, err := pirServer.ProcessQuery(nil, req.PirQuery)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to process PIR query: %v", err)
 	}
 
 	return &apiv1.GetValueResponse{PirResponse: pirResponse}, nil
+}
+
+// GetBaseParams returns the serialized BaseParams for a round (for client initialization).
+// This allows clients to create FrodoPIR clients for querying.
+func (s *Server) GetBaseParams(ctx context.Context, req *apiv1.GetBaseParamsRequest) (*apiv1.GetBaseParamsResponse, error) {
+	// Forward to leader if not the leader
+	if !s.store.IsLeader() {
+		return nil, status.Errorf(codes.FailedPrecondition, "not the leader")
+	}
+
+	s.roundsMu.RLock()
+	baseParams, exists := s.roundBaseParams[req.RoundId]
+	s.roundsMu.RUnlock()
+
+	if !exists {
+		return nil, status.Errorf(codes.NotFound, "round %d base params not found", req.RoundId)
+	}
+
+	return &apiv1.GetBaseParamsResponse{BaseParams: baseParams}, nil
+}
+
+// GetKeyMapping returns the key-to-index mapping for a round (for client queries).
+func (s *Server) GetKeyMapping(ctx context.Context, req *apiv1.GetKeyMappingRequest) (*apiv1.GetKeyMappingResponse, error) {
+	// Forward to leader if not the leader
+	if !s.store.IsLeader() {
+		return nil, status.Errorf(codes.FailedPrecondition, "not the leader")
+	}
+
+	s.roundsMu.RLock()
+	keyMapping, exists := s.roundKeyMapping[req.RoundId]
+	s.roundsMu.RUnlock()
+
+	if !exists {
+		return nil, status.Errorf(codes.NotFound, "round %d key mapping not found", req.RoundId)
+	}
+
+	// Convert map to protobuf format
+	entries := make([]*apiv1.KeyMappingEntry, 0, len(keyMapping))
+	for key, index := range keyMapping {
+		entries = append(entries, &apiv1.KeyMappingEntry{
+			Key:   key,
+			Index: int32(index),
+		})
+	}
+
+	return &apiv1.GetKeyMappingResponse{Entries: entries}, nil
 }
