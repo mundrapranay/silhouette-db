@@ -1,9 +1,9 @@
-.PHONY: proto build test clean run deps \
+.PHONY: proto build build-client build-tools test clean run deps \
 	build-pir clean-pir test-pir \
 	build-okvs clean-okvs test-okvs \
 	test-pir-integration test-okvs-unit test-okvs-integration test-pir-okvs \
 	bench bench-store bench-server bench-pir bench-okvs \
-	test-no-cgo fmt
+	test-no-cgo fmt test-runtime test-cluster
 
 # Go parameters
 GOCMD=go
@@ -79,6 +79,13 @@ build: proto build-pir build-okvs
 	$(GOBUILD) -tags cgo -o $(BINARY_DIR)/$(BINARY_NAME) ./cmd/silhouette-server
 	@echo "Build complete: $(BINARY_DIR)/$(BINARY_NAME)"
 
+# Build test client
+build-client:
+	@echo "Building test client..."
+	@mkdir -p $(BINARY_DIR)
+	$(GOBUILD) -tags cgo -o $(BINARY_DIR)/test-client ./cmd/test-client
+	@echo "Build complete: $(BINARY_DIR)/test-client"
+
 # Run tests (with cgo for PIR)
 test:
 	@echo "Running tests..."
@@ -149,10 +156,23 @@ run: build
 		-data-dir=./data/node1 \
 		-bootstrap=true
 
+# Run runtime tests (single node)
+test-runtime:
+	@echo "Running runtime tests..."
+	@./scripts/test-runtime.sh
+
+# Run cluster tests
+# Usage: make test-cluster NUM_NODES=3
+test-cluster:
+	@echo "Running cluster tests with $(or $(NUM_NODES),3) nodes..."
+	@./scripts/test-cluster.sh $(or $(NUM_NODES),3)
+
 # Clean build artifacts
 clean: clean-pir clean-okvs
 	@echo "Cleaning..."
 	rm -rf $(BINARY_DIR)
 	rm -rf ./data
+	rm -rf ./test-runtime
+	rm -rf ./test-cluster
 	$(GOCMD) clean
 
