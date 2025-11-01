@@ -14,6 +14,7 @@ import "C"
 import (
 	"encoding/base64"
 	"fmt"
+	"sort"
 	"unsafe"
 )
 
@@ -62,6 +63,8 @@ func NewFrodoPIRServer(pairs map[string][]byte, lweDim, elemSize, plaintextBits 
 	for k := range pairs {
 		keys = append(keys, k)
 	}
+	// Sort keys for deterministic ordering (must match keyToIndex mapping)
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
 
 	// Create array of base64-encoded strings
 	// Format: base64(value)
@@ -376,14 +379,25 @@ func (c *FrodoPIRClient) DecodeResponse(response []byte) ([]byte, error) {
 	// FrodoPIR decodes and returns the raw bytes, so we can return them directly
 	// However, we need to remove the padding zeros we added
 
+	// Note: For OKVS integration, we store float64 values (8 bytes).
+	// When we decode from PIR, we get padded bytes (elemSizeBytes, typically 64 bytes).
+	// We need to extract the original value size. For float64, it's always 8 bytes.
+	// For now, we'll try to preserve the original size by checking if it's a float64-sized value.
+
 	// Find the actual value length (remove trailing zeros)
-	// This is a simplification - in production, you might store length separately
+	// But preserve at least 8 bytes for float64 values (our use case)
+	minSize := 8 // Minimum size for float64
 	actualLen := len(outputCopy)
-	for actualLen > 0 && outputCopy[actualLen-1] == 0 {
+	for actualLen > minSize && outputCopy[actualLen-1] == 0 {
 		actualLen--
 	}
 
-	// Return the unpadded value
+	// Ensure we return at least the minimum size (for float64)
+	if actualLen < minSize {
+		actualLen = minSize
+	}
+
+	// Return the unpadded value (but at least minSize bytes)
 	if actualLen < len(outputCopy) {
 		return outputCopy[:actualLen], nil
 	}

@@ -63,8 +63,8 @@ func main() {
 	}
 
 	// Initialize cryptographic components
-	// TODO: Replace OKVS with actual implementation
-	okvsEncoder := &crypto.MockOKVSEncoder{}
+	// Use RB-OKVS encoder (requires values to be 8 bytes float64, minimum 100 pairs)
+	okvsEncoder := crypto.NewRBOKVSEncoder()
 	// Note: PIR server is now created per round in server.PublishValues
 
 	// Create gRPC server

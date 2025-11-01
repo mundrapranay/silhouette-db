@@ -1,0 +1,9 @@
+/Users/pranaymundra/Desktop/personal_projects/silhouette-db/third_party/rb-okvs-ffi/target/release/deps/sp_externalities-b22a8d06b721a943.d: /Users/pranaymundra/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sp-externalities-0.23.0/src/lib.rs /Users/pranaymundra/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sp-externalities-0.23.0/src/extensions.rs /Users/pranaymundra/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sp-externalities-0.23.0/src/scope_limited.rs
+
+/Users/pranaymundra/Desktop/personal_projects/silhouette-db/third_party/rb-okvs-ffi/target/release/deps/libsp_externalities-b22a8d06b721a943.rlib: /Users/pranaymundra/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sp-externalities-0.23.0/src/lib.rs /Users/pranaymundra/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sp-externalities-0.23.0/src/extensions.rs /Users/pranaymundra/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sp-externalities-0.23.0/src/scope_limited.rs
+
+/Users/pranaymundra/Desktop/personal_projects/silhouette-db/third_party/rb-okvs-ffi/target/release/deps/libsp_externalities-b22a8d06b721a943.rmeta: /Users/pranaymundra/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sp-externalities-0.23.0/src/lib.rs /Users/pranaymundra/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sp-externalities-0.23.0/src/extensions.rs /Users/pranaymundra/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sp-externalities-0.23.0/src/scope_limited.rs
+
+/Users/pranaymundra/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sp-externalities-0.23.0/src/lib.rs:
+/Users/pranaymundra/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sp-externalities-0.23.0/src/extensions.rs:
+/Users/pranaymundra/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sp-externalities-0.23.0/src/scope_limited.rs:

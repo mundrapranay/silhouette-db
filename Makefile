@@ -1,4 +1,9 @@
-.PHONY: proto build test clean run deps
+.PHONY: proto build test clean run deps \
+	build-pir clean-pir test-pir \
+	build-okvs clean-okvs test-okvs \
+	test-pir-integration test-okvs-unit test-okvs-integration test-pir-okvs \
+	bench bench-store bench-server bench-pir bench-okvs \
+	test-no-cgo fmt
 
 # Go parameters
 GOCMD=go
@@ -43,14 +48,32 @@ test-pir:
 	@cd $(PIR_FFI_DIR) && cargo test --release
 	@echo "FrodoPIR FFI library tests passed"
 
+# Rust/OKVS build targets
+OKVS_FFI_DIR := third_party/rb-okvs-ffi
+
+build-okvs:
+	@echo "Building OKVS FFI library..."
+	@cd $(OKVS_FFI_DIR) && cargo build --release
+	@echo "OKVS FFI library built"
+
+clean-okvs:
+	@echo "Cleaning OKVS FFI library..."
+	@cd $(OKVS_FFI_DIR) && cargo clean
+	@echo "OKVS FFI library cleaned"
+
+test-okvs:
+	@echo "Testing OKVS FFI library..."
+	@cd $(OKVS_FFI_DIR) && cargo test --release
+	@echo "OKVS FFI library tests passed"
+
 # Download dependencies
 deps:
 	@echo "Downloading dependencies..."
 	$(GOMOD) download
 	$(GOMOD) tidy
 
-# Build the project (requires PIR library)
-build: proto build-pir
+# Build the project (requires PIR and OKVS libraries)
+build: proto build-pir build-okvs
 	@echo "Building $(BINARY_NAME)..."
 	@mkdir -p $(BINARY_DIR)
 	$(GOBUILD) -tags cgo -o $(BINARY_DIR)/$(BINARY_NAME) ./cmd/silhouette-server
@@ -71,6 +94,21 @@ test-pir-integration:
 	@echo "Running PIR integration tests..."
 	$(GOTEST) -tags cgo -v ./internal/server/... -run TestPIRIntegration
 
+# Run OKVS unit tests
+test-okvs-unit:
+	@echo "Running OKVS unit tests..."
+	$(GOTEST) -tags cgo -v ./internal/crypto/... -run TestRBOKVS
+
+# Run OKVS integration tests
+test-okvs-integration:
+	@echo "Running OKVS integration tests..."
+	$(GOTEST) -tags cgo -v ./internal/server/... -run TestRBOKVSIntegration
+
+# Run PIR + OKVS integration tests
+test-pir-okvs:
+	@echo "Running PIR + OKVS integration tests..."
+	$(GOTEST) -tags cgo -v ./internal/server/... -run TestPIR_OKVS
+
 # Run benchmarks (with cgo for PIR)
 bench:
 	@echo "Running benchmarks..."
@@ -90,6 +128,12 @@ bench-pir:
 	@echo "Running PIR benchmarks..."
 	$(GOTEST) -tags cgo -bench=BenchmarkPIR -benchmem -run=^$$ ./internal/server/...
 
+# Run OKVS benchmarks
+bench-okvs:
+	@echo "Running OKVS benchmarks..."
+	$(GOTEST) -tags cgo -bench=BenchmarkOKVS -benchmem -run=^$$ ./internal/crypto/...
+	$(GOTEST) -tags cgo -bench=BenchmarkOKVS -benchmem -run=^$$ ./internal/server/...
+
 # Format code
 fmt:
 	@echo "Formatting code..."
@@ -106,7 +150,7 @@ run: build
 		-bootstrap=true
 
 # Clean build artifacts
-clean:
+clean: clean-pir clean-okvs
 	@echo "Cleaning..."
 	rm -rf $(BINARY_DIR)
 	rm -rf ./data

@@ -1,3 +1,6 @@
 [submodule "third_party/frodo-pir"]
 	path = third_party/frodo-pir
 	url = https://github.com/brave-experiments/frodo-pir.git
+[submodule "third_party/rb-okvs"]
+	path = third_party/rb-okvs
+	url = https://github.com/felicityin/rb-okvs.git

@@ -1,0 +1,16 @@
+language = "C"
+header = """
+/* WARNING: This file is auto-generated. Do not edit manually. */
+"""
+include_guard = "RB_OKVS_FFI_H"
+autogen_warning = "/* WARNING: This file is auto-generated. Do not edit manually. */"
+pragma_once = true
+
+[parse]
+parse_deps = true
+include = ["rb-okvs"]
+
+[export]
+exclude = [".*"]
+include = ["RBOKVSResult"]
+
