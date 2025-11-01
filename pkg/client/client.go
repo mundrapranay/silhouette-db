@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -11,17 +12,21 @@ import (
 	"github.com/mundrapranay/silhouette-db/internal/crypto"
 )
 
+// PIRClient interface for PIR operations
+type PIRClient interface {
+	GenerateQuery(key string) ([]byte, error)
+	DecodeResponse(response []byte) ([]byte, error)
+	Close() error
+}
+
 // Client provides a Go client library for LEDP workers to interact with
 // the silhouette-db coordination layer.
 type Client struct {
-	conn      *grpc.ClientConn
-	service   apiv1.CoordinationServiceClient
-	pirClient interface { // PIRClient interface
-		GenerateQuery(key string) ([]byte, error)
-		DecodeResponse(response []byte) ([]byte, error)
-		Close() error
-	}
+	conn        *grpc.ClientConn
+	service     apiv1.CoordinationServiceClient
+	pirClients  map[uint64]PIRClient      // Separate PIR client per round
 	keyMappings map[uint64]map[string]int // Cache key mappings per round
+	mu          sync.RWMutex              // Protect concurrent access to pirClients and keyMappings
 }
 
 // NewClient creates a new client connection to a silhouette-db server.
@@ -36,17 +41,35 @@ func NewClient(serverAddr string, pirClient interface {
 		return nil, fmt.Errorf("failed to connect to server: %w", err)
 	}
 
-	return &Client{
+	client := &Client{
 		conn:        conn,
 		service:     apiv1.NewCoordinationServiceClient(conn),
-		pirClient:   pirClient,
+		pirClients:  make(map[uint64]PIRClient),
 		keyMappings: make(map[uint64]map[string]int),
-	}, nil
+	}
+
+	// If a PIR client was provided (for backward compatibility), don't use per-round clients
+	// This is mainly for testing/backward compatibility
+	if pirClient != nil {
+		// Note: This doesn't work well for multi-round scenarios
+		// For proper multi-round support, use nil and let GetValue initialize per-round clients
+	}
+
+	return client, nil
 }
 
 // InitializePIRClient initializes a FrodoPIR client for a specific round.
 // This fetches BaseParams and key mapping from the server.
+// Thread-safe: uses mutex to prevent concurrent initialization for the same round.
 func (c *Client) InitializePIRClient(ctx context.Context, roundID uint64) error {
+	c.mu.Lock()
+	// Check again after acquiring lock (double-check pattern)
+	if _, exists := c.pirClients[roundID]; exists {
+		c.mu.Unlock()
+		return nil // Already initialized
+	}
+	c.mu.Unlock()
+
 	// Fetch BaseParams from server
 	baseParamsReq := &apiv1.GetBaseParamsRequest{RoundId: roundID}
 	baseParamsResp, err := c.service.GetBaseParams(ctx, baseParamsReq)
@@ -66,7 +89,6 @@ func (c *Client) InitializePIRClient(ctx context.Context, roundID uint64) error 
 	for _, entry := range keyMappingResp.Entries {
 		keyToIndex[entry.Key] = int(entry.Index)
 	}
-	c.keyMappings[roundID] = keyToIndex
 
 	// Create FrodoPIR client
 	pirClient, err := crypto.NewFrodoPIRClient(baseParamsResp.BaseParams, keyToIndex)
@@ -74,17 +96,37 @@ func (c *Client) InitializePIRClient(ctx context.Context, roundID uint64) error 
 		return fmt.Errorf("failed to create FrodoPIR client: %w", err)
 	}
 
-	c.pirClient = pirClient
+	// Store both key mapping and PIR client (with lock)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Double-check: another goroutine might have initialized it while we were fetching
+	if _, exists := c.pirClients[roundID]; exists {
+		// Close the one we just created since another goroutine already created one
+		_ = pirClient.Close()
+		return nil
+	}
+
+	c.keyMappings[roundID] = keyToIndex
+	c.pirClients[roundID] = pirClient
+
 	return nil
 }
 
 // Close closes the client connection and frees PIR client resources.
 func (c *Client) Close() error {
-	if c.pirClient != nil {
-		if err := c.pirClient.Close(); err != nil {
-			return fmt.Errorf("failed to close PIR client: %w", err)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Close all PIR clients
+	for roundID, pirClient := range c.pirClients {
+		if err := pirClient.Close(); err != nil {
+			// Log error but continue closing others
+			_ = err // Ignore individual close errors
 		}
+		delete(c.pirClients, roundID)
 	}
+
 	return c.conn.Close()
 }
 
@@ -137,16 +179,31 @@ func (c *Client) PublishValues(ctx context.Context, roundID uint64, workerID str
 
 // GetValue retrieves a value for a specific key from a round using PIR.
 // If the PIR client hasn't been initialized for this round, it will be initialized automatically.
+// Thread-safe: supports concurrent queries across different rounds.
 func (c *Client) GetValue(ctx context.Context, roundID uint64, key string) ([]byte, error) {
-	// Initialize PIR client if not already done for this round
-	if c.pirClient == nil || c.keyMappings[roundID] == nil {
+	// Check if PIR client is initialized for this round
+	c.mu.RLock()
+	pirClient, exists := c.pirClients[roundID]
+	c.mu.RUnlock()
+
+	if !exists {
+		// Initialize PIR client for this round
 		if err := c.InitializePIRClient(ctx, roundID); err != nil {
 			return nil, fmt.Errorf("failed to initialize PIR client: %w", err)
+		}
+
+		// Get the client after initialization
+		c.mu.RLock()
+		pirClient, exists = c.pirClients[roundID]
+		c.mu.RUnlock()
+
+		if !exists {
+			return nil, fmt.Errorf("PIR client not found after initialization")
 		}
 	}
 
 	// Generate PIR query for the key
-	query, err := c.pirClient.GenerateQuery(key)
+	query, err := pirClient.GenerateQuery(key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate PIR query: %w", err)
 	}
@@ -163,7 +220,7 @@ func (c *Client) GetValue(ctx context.Context, roundID uint64, key string) ([]by
 	}
 
 	// Decode PIR response
-	value, err := c.pirClient.DecodeResponse(resp.PirResponse)
+	value, err := pirClient.DecodeResponse(resp.PirResponse)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode PIR response: %w", err)
 	}

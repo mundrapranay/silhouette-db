@@ -134,33 +134,44 @@ echo ""
 # Use the cluster-peer-helper program
 # Note: This helper needs access to the leader's store instance
 # For proper cluster formation, an AddPeer RPC endpoint would be better
-HELPER_DIR="$(dirname "$0")/cluster-peer-helper"
+# Helper is in cmd/ so it can access internal packages
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+HELPER_DIR="$PROJECT_ROOT/cmd/cluster-peer-helper"
 
 # Build helper
 echo "🔧 Building peer addition helper..."
-cd "$HELPER_DIR" || exit 1
-
-# Check if source file exists
-HELPER_SRC="$HELPER_DIR/main.go"
-if [ ! -f "$HELPER_SRC" ]; then
-    echo "⚠️  Helper source file not found: $HELPER_SRC"
+if [ ! -d "$HELPER_DIR" ]; then
+    echo "⚠️  Helper directory not found: $HELPER_DIR"
     HELPER_BUILT=false
 else
-    # Build the helper
-    if go build -tags cgo -o add-peer-helper "$HELPER_SRC" 2>&1 | grep -v "go: downloading" | grep -v "warning"; then
-        if [ -f "$HELPER_DIR/add-peer-helper" ]; then
+    # Check if source file exists (before cd)
+    HELPER_SRC="$HELPER_DIR/main.go"
+    if [ ! -f "$HELPER_SRC" ]; then
+        echo "⚠️  Helper source file not found: $HELPER_SRC"
+        HELPER_BUILT=false
+    else
+        # Build from project root so helper can access internal packages
+        cd "$PROJECT_ROOT" || exit 1
+        BUILD_OUTPUT=$(go build -tags cgo -o "$HELPER_DIR/add-peer-helper" ./cmd/cluster-peer-helper 2>&1)
+        BUILD_EXIT=$?
+        
+        # Filter out informational messages but keep errors
+        ERROR_OUTPUT=$(echo "$BUILD_OUTPUT" | grep -v "go: downloading" | grep -v "warning" | grep -v "^$" || true)
+        
+        if [ $BUILD_EXIT -eq 0 ] && [ -f "$HELPER_DIR/add-peer-helper" ]; then
             HELPER_BUILT=true
             echo "   ✅ Helper built successfully"
         else
             HELPER_BUILT=false
-            echo "⚠️  Helper build failed - binary not created"
+            if [ -n "$ERROR_OUTPUT" ]; then
+                echo "⚠️  Helper build failed:"
+                echo "$ERROR_OUTPUT" | head -5 | sed 's/^/      /'
+            else
+                echo "⚠️  Helper build failed - will test with bootstrap node only"
+            fi
         fi
-    else
-        HELPER_BUILT=false
-        echo "⚠️  Helper build failed - will test with bootstrap node only"
     fi
 fi
-cd - > /dev/null || true
 
 # Start additional nodes
 echo ""
@@ -361,15 +372,22 @@ if [ $NUM_NODES -gt 1 ]; then
                     # Check if port is listening
                     port=$(echo "$addr" | cut -d: -f2)
                     if command -v nc >/dev/null 2>&1 && timeout 1 nc -z 127.0.0.1 "$port" 2>/dev/null; then
-                        echo "   Found working node: $addr"
-                        LEADER_ADDR="$addr"
-                        break
-                    elif timeout 1 "$BINARY_DIR/test-client" \
+                        # Verify it's actually a leader by trying to start a round
+                        if timeout 2 "$BINARY_DIR/test-client" \
+                            -server="$addr" \
+                            -pairs=1 \
+                            -round=99998 \
+                            -key="test-key-000" 2>/dev/null 2>&1 | grep -q "Round started!"; then
+                            echo "   Found new leader: $addr"
+                            LEADER_ADDR="$addr"
+                            break
+                        fi
+                    elif timeout 2 "$BINARY_DIR/test-client" \
                         -server="$addr" \
                         -pairs=1 \
                         -round=99998 \
-                        -key="test-key-000" 2>/dev/null 2>&1 | grep -q "Connected successfully"; then
-                        echo "   Found working node: $addr"
+                        -key="test-key-000" 2>/dev/null 2>&1 | grep -q "Round started!"; then
+                        echo "   Found new leader: $addr"
                         LEADER_ADDR="$addr"
                         break
                     fi
@@ -387,28 +405,29 @@ echo "📋 Test 5: Direct PIR Fallback in Cluster"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# If leader was killed in Test 4, we need to find a working node for Test 5
-if [ -z "$LEADER_ADDR" ] || ! timeout 1 "$BINARY_DIR/test-client" \
+# If leader was killed in Test 4, we need to find the new leader for Test 5
+if [ -z "$LEADER_ADDR" ] || ! timeout 2 "$BINARY_DIR/test-client" \
     -server="$LEADER_ADDR" \
     -pairs=1 \
     -round=99997 \
-    -key="test-key-000" 2>/dev/null 2>&1 | grep -q "Connected successfully"; then
-    echo "🔍 Finding working node after leader failure..."
+    -key="test-key-000" 2>/dev/null 2>&1 | grep -q "Round started!"; then
+    echo "🔍 Finding new leader after leader failure..."
     LEADER_ADDR=""
     for addr in "${GRPC_ADDRESSES[@]}"; do
-        if timeout 2 "$BINARY_DIR/test-client" \
+        # Check if this node can start a round (only leader can do this)
+        if timeout 3 "$BINARY_DIR/test-client" \
             -server="$addr" \
             -pairs=1 \
             -round=99996 \
-            -key="test-key-000" 2>/dev/null 2>&1 | grep -q "Connected successfully"; then
-            echo "   Found working node: $addr"
+            -key="test-key-000" 2>/dev/null 2>&1 | grep -q "Round started!"; then
+            echo "   Found new leader: $addr"
             LEADER_ADDR="$addr"
             break
         fi
     done
     
     if [ -z "$LEADER_ADDR" ]; then
-        echo "⚠️  No working nodes available for Test 5"
+        echo "⚠️  No leader found for Test 5"
         echo "   Skipping test (leader was killed and cluster may be degraded)"
         echo ""
     fi

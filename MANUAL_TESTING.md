@@ -240,7 +240,51 @@ After manual testing passes:
 1. ✅ Verify OKVS encoding works
 2. ✅ Verify PIR queries work
 3. ✅ Verify graceful fallback works
-4. ➡️ Test with multiple workers
-5. ➡️ Test with multiple server nodes
-6. ➡️ Test under load
+4. ✅ Test with multiple workers (`make test-multi-worker`)
+5. ✅ Test with multiple server nodes (`make test-cluster`)
+6. ✅ Test under load (`make test-load`)
+
+## Multi-Worker Testing
+
+### Quick Start:
+```bash
+# Default: 10 workers, 20 pairs each
+make test-multi-worker
+
+# Custom: 20 workers, 50 pairs each, round 200
+make test-multi-worker NUM_WORKERS=20 PAIRS_PER_WORKER=50 ROUND_ID=200
+
+# Or directly:
+./scripts/test-multi-worker.sh 127.0.0.1:9090 20 50 200
+```
+
+**What it tests:**
+- Concurrent worker publishing
+- Worker aggregation correctness
+- Large dataset handling (OKVS encoding with 1000+ pairs via multiple workers)
+- Query verification across different worker data
+
+## Load Testing
+
+### Quick Start:
+```bash
+# Default: 10 rounds, 150 pairs/round, 5 workers/round, 10 QPS, 30s duration
+make test-load
+
+# Custom: 20 rounds, 200 pairs/round, 10 workers/round, 50 QPS, 60s duration
+make test-load NUM_ROUNDS=20 PAIRS=200 WORKERS=10 QPS=50.0 DURATION=60
+
+# Or directly:
+./scripts/test-load.sh 127.0.0.1:9090 20 200 10 50.0 60
+```
+
+**What it tests:**
+- Concurrent round creation and completion
+- Multiple workers publishing simultaneously
+- PIR query load (configurable QPS)
+- System stability under load
+- Metrics tracking (completion rates, latencies)
+- Thread-safe concurrent queries across multiple rounds
+
+**Note:** The load test uses per-round PIR clients to prevent race conditions when querying different rounds concurrently. The client automatically initializes separate PIR clients for each round as needed.
 

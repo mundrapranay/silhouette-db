@@ -1,9 +1,9 @@
-.PHONY: proto build build-client build-tools test clean run deps \
+.PHONY: proto build build-client build-multi-worker-test build-load-test build-tools test clean run deps \
 	build-pir clean-pir test-pir \
 	build-okvs clean-okvs test-okvs \
 	test-pir-integration test-okvs-unit test-okvs-integration test-pir-okvs \
 	bench bench-store bench-server bench-pir bench-okvs \
-	test-no-cgo fmt test-runtime test-cluster
+	test-no-cgo fmt test-runtime test-cluster test-multi-worker test-load
 
 # Go parameters
 GOCMD=go
@@ -86,6 +86,20 @@ build-client:
 	$(GOBUILD) -tags cgo -o $(BINARY_DIR)/test-client ./cmd/test-client
 	@echo "Build complete: $(BINARY_DIR)/test-client"
 
+# Build multi-worker test
+build-multi-worker-test:
+	@echo "Building multi-worker test..."
+	@mkdir -p $(BINARY_DIR)
+	$(GOBUILD) -tags cgo -o $(BINARY_DIR)/multi-worker-test ./cmd/multi-worker-test
+	@echo "Build complete: $(BINARY_DIR)/multi-worker-test"
+
+# Build load test
+build-load-test:
+	@echo "Building load test..."
+	@mkdir -p $(BINARY_DIR)
+	$(GOBUILD) -tags cgo -o $(BINARY_DIR)/load-test ./cmd/load-test
+	@echo "Build complete: $(BINARY_DIR)/load-test"
+
 # Run tests (with cgo for PIR)
 test:
 	@echo "Running tests..."
@@ -166,6 +180,18 @@ test-runtime:
 test-cluster:
 	@echo "Running cluster tests with $(or $(NUM_NODES),3) nodes..."
 	@./scripts/test-cluster.sh $(or $(NUM_NODES),3)
+
+# Run multi-worker tests
+# Usage: make test-multi-worker [SERVER] [NUM_WORKERS] [PAIRS_PER_WORKER] [ROUND_ID]
+test-multi-worker:
+	@echo "Running multi-worker tests..."
+	@./scripts/test-multi-worker.sh $(or $(SERVER),127.0.0.1:9090) $(or $(NUM_WORKERS),10) $(or $(PAIRS_PER_WORKER),20) $(or $(ROUND_ID),100)
+
+# Run load tests
+# Usage: make test-load [SERVER] [NUM_ROUNDS] [PAIRS] [WORKERS] [QPS] [DURATION]
+test-load:
+	@echo "Running load tests..."
+	@./scripts/test-load.sh $(or $(SERVER),127.0.0.1:9090) $(or $(NUM_ROUNDS),10) $(or $(PAIRS),150) $(or $(WORKERS),5) $(or $(QPS),10.0) $(or $(DURATION),30)
 
 # Clean build artifacts
 clean: clean-pir clean-okvs
