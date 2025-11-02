@@ -33,6 +33,10 @@ go.work
 data/
 *.log
 
+# Test results
+*_results_*.txt
+test-degree-collector/
+
 # Generated Protocol Buffer code
 *.pb.go
 
