@@ -21,8 +21,15 @@ The system consists of:
 
 ```
 /silhouette-db
+├── algorithms/              # Graph algorithms framework
+│   ├── common/              # Shared interfaces and utilities
+│   ├── exact/               # Exact (non-private) algorithms
+│   └── ledp/                # LEDP (private) algorithms
 ├── api/v1/                  # Protocol Buffers definitions
-├── cmd/silhouette-server/   # Main server application
+├── cmd/
+│   ├── algorithm-runner/    # Algorithm execution entry point
+│   ├── silhouette-server/   # Main server application
+│   └── ...                  # Other command-line tools
 ├── internal/
 │   ├── crypto/              # Cryptographic layer (OKVS, PIR)
 │   ├── server/              # gRPC server implementation
@@ -39,6 +46,7 @@ The system consists of:
 - Go 1.21 or later
 - Protocol Buffer compiler (`protoc`)
 - Go plugins for protoc (`protoc-gen-go`, `protoc-gen-go-grpc`)
+- Rust and Cargo (for cryptographic libraries)
 
 ### Building
 
@@ -49,8 +57,24 @@ make proto
 # Build the server
 make build
 
+# Build algorithm runner
+make build-algorithm-runner
+
 # Run the server
 ./bin/silhouette-server -config configs/node1.hcl
+
+# Run an algorithm
+./bin/algorithm-runner -config configs/example_algorithm.yaml
+```
+
+### Running Algorithms
+
+```bash
+# Build the algorithm runner
+make build-algorithm-runner
+
+# Run with config file
+./bin/algorithm-runner -config configs/example_algorithm.yaml -verbose
 ```
 
 ## Documentation

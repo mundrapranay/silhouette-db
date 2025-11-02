@@ -136,6 +136,24 @@ func (s *Server) PublishValues(ctx context.Context, req *apiv1.PublishValuesRequ
 			keyToIndex[k] = i
 		}
 
+		// Handle empty rounds (when all workers publish empty pairs)
+		// For empty rounds, we skip PIR server creation but still complete the round
+		// This allows synchronization-only rounds where no data is published
+		if len(allPairs) == 0 {
+			// Empty round: just store empty data and skip PIR server creation
+			roundKey := fmt.Sprintf("round_%d_results", req.RoundId)
+			var storageData []byte
+			if err := s.store.Set(roundKey, storageData); err != nil {
+				return nil, status.Errorf(codes.Internal, "failed to store round data: %v", err)
+			}
+			// Mark round as complete (but no PIR server available)
+			s.roundsMu.Lock()
+			// Store empty key mapping to indicate round exists but has no data
+			s.roundKeyMapping[req.RoundId] = make(map[string]int)
+			s.roundsMu.Unlock()
+			return &apiv1.PublishValuesResponse{Success: true}, nil
+		}
+
 		// Check if we have enough pairs for OKVS encoding (minimum 100 pairs)
 		// If we have fewer pairs, we'll skip OKVS encoding and use direct PIR
 		useOKVS := len(allPairs) >= 100
@@ -252,11 +270,18 @@ func (s *Server) GetValue(ctx context.Context, req *apiv1.GetValueRequest) (*api
 	}
 
 	s.roundsMu.RLock()
-	pirServer, exists := s.pirServers[req.RoundId]
+	pirServer, pirServerExists := s.pirServers[req.RoundId]
+	keyMappingExists := s.roundKeyMapping[req.RoundId] != nil
 	s.roundsMu.RUnlock()
 
-	if !exists {
-		return nil, status.Errorf(codes.NotFound, "round %d results not found", req.RoundId)
+	// Check if round exists (even if empty)
+	if !keyMappingExists {
+		return nil, status.Errorf(codes.NotFound, "round %d not found", req.RoundId)
+	}
+
+	// Check if round is empty (no PIR server means empty round)
+	if !pirServerExists {
+		return nil, status.Errorf(codes.FailedPrecondition, "round %d is empty (no data available)", req.RoundId)
 	}
 
 	// Process PIR query using FrodoPIR server
