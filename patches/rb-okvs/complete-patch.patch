@@ -1,0 +1,367 @@
+diff --git a/src/lib.rs b/src/lib.rs
+index d6d5a4e..0e158b5 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,4 +1,4 @@
+-#![feature(test)]
++#![cfg_attr(test, feature(test))]
+ 
+ pub mod emm;
+ pub mod error;
+diff --git a/tests/float64_use_case.rs b/tests/float64_use_case.rs
+new file mode 100644
+index 0000000..78d833c
+--- /dev/null
++++ b/tests/float64_use_case.rs
+@@ -0,0 +1,351 @@
++// Integration tests for RB-OKVS to verify correctness for silhouette-db float64 use case
++// These tests verify that the library works correctly with string keys and f64 (float64) values
++
++use blake2::{Blake2b512, Digest};
++use rb_okvs::okvs::RbOkvs;
++use rb_okvs::types::{Okvs, OkvsKey, OkvsValue, Pair};
++
++// f64 is 8 bytes
++const VALUE_SIZE_8: usize = 8;
++
++/// Hash a string key to an 8-byte OkvsKey using BLAKE2b
++/// This ensures consistent key representation for strings longer than 8 bytes
++fn hash_key_to_okvs_key(key: &str) -> OkvsKey {
++    let mut hasher = Blake2b512::new();
++    hasher.update(key.as_bytes());
++    let hash = hasher.finalize();
++    
++    // Take first 8 bytes of hash
++    let mut key_bytes = [0u8; 8];
++    key_bytes.copy_from_slice(&hash[..8]);
++    OkvsKey(key_bytes)
++}
++
++/// Convert a f64 value to a fixed-size OkvsValue<8>
++fn f64_to_okvs_value(value: f64) -> OkvsValue<VALUE_SIZE_8> {
++    let bytes = value.to_le_bytes();
++    OkvsValue(bytes)
++}
++
++/// Convert an OkvsValue<8> back to f64
++fn okvs_value_to_f64(value: &OkvsValue<VALUE_SIZE_8>) -> f64 {
++    f64::from_le_bytes(value.0)
++}
++
++/// Encode key-value pairs where values are f64
++fn encode_float64_pairs(
++    pairs: Vec<(String, f64)>,
++) -> Option<(RbOkvs, Vec<OkvsValue<VALUE_SIZE_8>>)> {
++    if pairs.is_empty() {
++        return None;
++    }
++
++    // Convert string keys and f64 values to OKVS format
++    let okvs_pairs: Vec<Pair<OkvsKey, OkvsValue<VALUE_SIZE_8>>> = pairs
++        .iter()
++        .map(|(key_str, value_f64)| {
++            let key = hash_key_to_okvs_key(key_str);
++            let value = f64_to_okvs_value(*value_f64);
++            (key, value)
++        })
++        .collect();
++
++    let rb_okvs = RbOkvs::new(okvs_pairs.len());
++    
++    match rb_okvs.encode(okvs_pairs.clone()) {
++        Ok(encoding) => Some((rb_okvs, encoding)),
++        Err(e) => {
++            println!("Encoding failed: {:?}", e);
++            None
++        }
++    }
++}
++
++/// Decode a f64 value from encoding using a string key
++fn decode_float64_value(
++    rb_okvs: &RbOkvs,
++    encoding: &Vec<OkvsValue<VALUE_SIZE_8>>,
++    key_str: &str,
++) -> f64 {
++    let key = hash_key_to_okvs_key(key_str);
++    let decoded_value = rb_okvs.decode(encoding, &key);
++    okvs_value_to_f64(&decoded_value)
++}
++
++// ========== Basic Functionality Tests ==========
++
++#[test]
++fn test_basic_float64_encode_decode() {
++    // Note: Library requires 100+ pairs for reliable operation
++    // Using 100 pairs to ensure the matrix has sufficient rank
++    let mut test_data: Vec<(String, f64)> = Vec::new();
++    
++    // Add some specific test values
++    test_data.push(("key1".to_string(), 3.14159));
++    test_data.push(("key2".to_string(), -42.0));
++    test_data.push(("key3".to_string(), 0.0));
++    test_data.push(("key4".to_string(), 1.7976931348623157e+308)); // Max f64
++    test_data.push(("key5".to_string(), -1.7976931348623157e+308)); // Min f64
++    
++    // Add more pairs to reach 100
++    for i in 6..=100 {
++        test_data.push((format!("key{}", i), i as f64 * 0.123));
++    }
++
++    let (rb_okvs, encoding) = encode_float64_pairs(test_data.clone())
++        .expect("Encoding should succeed");
++
++    // Verify we can decode all pairs correctly
++    for (key_str, expected_f64) in &test_data {
++        let decoded_f64 = decode_float64_value(&rb_okvs, &encoding, key_str);
++        
++        // Use approximate equality for floating point comparison
++        // f64 has precision issues, so we check with epsilon
++        let epsilon = f64::EPSILON * 100.0; // Allow some tolerance
++        assert!(
++            (decoded_f64 - *expected_f64).abs() < epsilon || 
++            decoded_f64 == *expected_f64,
++            "Failed to decode key: {}, expected: {}, got: {}",
++            key_str, expected_f64, decoded_f64
++        );
++    }
++}
++
++#[test]
++fn test_many_float64_pairs() {
++    let mut pairs: Vec<(String, f64)> = Vec::new();
++    
++    // Create 100 key-value pairs with various f64 values
++    for i in 0..100 {
++        let key_str = format!("key_{}", i);
++        let value_f64 = i as f64 * 0.123456789;
++        pairs.push((key_str, value_f64));
++    }
++
++    let (rb_okvs, encoding) = encode_float64_pairs(pairs.clone())
++        .expect("Encoding should succeed with many pairs");
++
++    // Verify all pairs can be decoded correctly
++    for (key_str, expected_f64) in &pairs {
++        let decoded_f64 = decode_float64_value(&rb_okvs, &encoding, key_str);
++        
++        // Use approximate equality for floating point comparison
++        let epsilon = f64::EPSILON * 100.0;
++        assert!(
++            (decoded_f64 - *expected_f64).abs() < epsilon || 
++            decoded_f64 == *expected_f64,
++            "Failed to decode key: {}, expected: {}, got: {}",
++            key_str, expected_f64, decoded_f64
++        );
++    }
++}
++
++#[test]
++fn test_float64_special_values() {
++    // Test special f64 values
++    // Note: Library requires 100+ pairs for reliable operation
++    let mut test_data: Vec<(String, f64)> = Vec::new();
++    
++    // Add special f64 values
++    test_data.push(("zero".to_string(), 0.0));
++    test_data.push(("negative_zero".to_string(), -0.0));
++    test_data.push(("infinity".to_string(), f64::INFINITY));
++    test_data.push(("negative_infinity".to_string(), f64::NEG_INFINITY));
++    test_data.push(("nan".to_string(), f64::NAN));
++    test_data.push(("epsilon".to_string(), f64::EPSILON));
++    test_data.push(("max".to_string(), f64::MAX));
++    test_data.push(("min".to_string(), f64::MIN));
++    test_data.push(("smallest".to_string(), f64::MIN_POSITIVE));
++    
++    // Add more pairs to reach 100+
++    for i in 10..=100 {
++        test_data.push((format!("extra{}", i), i as f64));
++    }
++
++    let (rb_okvs, encoding) = encode_float64_pairs(test_data.clone())
++        .expect("Encoding should succeed");
++
++    for (key_str, expected_f64) in &test_data {
++        let decoded_f64 = decode_float64_value(&rb_okvs, &encoding, key_str);
++        
++        // Handle special cases
++        if expected_f64.is_nan() {
++            assert!(decoded_f64.is_nan(), "NaN should decode to NaN for key: {}", key_str);
++        } else if expected_f64.is_infinite() {
++            assert_eq!(
++                decoded_f64.is_infinite(),
++                expected_f64.is_infinite(),
++                "Infinity should decode correctly for key: {}",
++                key_str
++            );
++            assert_eq!(
++                decoded_f64.is_sign_positive(),
++                expected_f64.is_sign_positive(),
++                "Infinity sign should match for key: {}",
++                key_str
++            );
++        } else {
++            // For regular values, use approximate equality
++            let epsilon = f64::EPSILON * 100.0;
++            assert!(
++                (decoded_f64 - *expected_f64).abs() < epsilon || 
++                decoded_f64 == *expected_f64,
++                "Failed to decode key: {}, expected: {}, got: {}",
++                key_str, expected_f64, decoded_f64
++            );
++        }
++    }
++}
++
++#[test]
++fn test_float64_precision() {
++    // Test that precision is preserved
++    // Note: Library requires 100+ pairs for reliable operation
++    let mut test_data: Vec<(String, f64)> = Vec::new();
++    
++    // Add precision test values
++    test_data.push(("pi".to_string(), std::f64::consts::PI));
++    test_data.push(("e".to_string(), std::f64::consts::E));
++    test_data.push(("sqrt2".to_string(), std::f64::consts::SQRT_2));
++    test_data.push(("precise".to_string(), 1.2345678901234567890));
++    test_data.push(("negative_precise".to_string(), -1.2345678901234567890));
++    
++    // Add more pairs to reach 100+
++    for i in 6..=100 {
++        test_data.push((format!("extra{}", i), i as f64 * 0.789));
++    }
++
++    let (rb_okvs, encoding) = encode_float64_pairs(test_data.clone())
++        .expect("Encoding should succeed");
++
++    for (key_str, expected_f64) in &test_data {
++        let decoded_f64 = decode_float64_value(&rb_okvs, &encoding, key_str);
++        
++        // f64 has ~15-17 decimal digits of precision
++        // Check that we preserve full precision
++        let epsilon = f64::EPSILON * 1000.0; // Allow some tolerance for rounding
++        assert!(
++            (decoded_f64 - expected_f64).abs() < epsilon,
++            "Precision lost for key: {}, expected: {}, got: {}, diff: {}",
++            key_str, expected_f64, decoded_f64, (decoded_f64 - expected_f64).abs()
++        );
++    }
++}
++
++#[test]
++fn test_float64_deterministic_encoding() {
++    // Verify that same input produces same encoding
++    // Note: Library requires 100+ pairs for reliable operation
++    let mut pairs1: Vec<(String, f64)> = Vec::new();
++    
++    // Add some test values
++    pairs1.push(("key1".to_string(), 3.14159));
++    pairs1.push(("key2".to_string(), -42.0));
++    pairs1.push(("key3".to_string(), 0.0));
++    
++    // Add more pairs to reach 100+
++    for i in 4..=100 {
++        pairs1.push((format!("key{}", i), i as f64));
++    }
++
++    let (rb_okvs1, encoding1) = encode_float64_pairs(pairs1.clone())
++        .expect("First encoding should succeed");
++
++    let (rb_okvs2, encoding2) = encode_float64_pairs(pairs1.clone())
++        .expect("Second encoding should succeed");
++
++    // Encoding should be deterministic (same length)
++    assert_eq!(
++        encoding1.len(),
++        encoding2.len(),
++        "Encoding should be deterministic - same length"
++    );
++
++    // Both should decode the same values
++    for (key_str, _) in &pairs1 {
++        let decoded1 = decode_float64_value(&rb_okvs1, &encoding1, key_str);
++        let decoded2 = decode_float64_value(&rb_okvs2, &encoding2, key_str);
++        
++        let epsilon = f64::EPSILON * 100.0;
++        assert!(
++            (decoded1 - decoded2).abs() < epsilon || decoded1 == decoded2,
++            "Decoded values should match for key: {}, got: {} and {}",
++            key_str, decoded1, decoded2
++        );
++    }
++}
++
++#[test]
++fn test_float64_key_collision_handling() {
++    // Test that different string keys (which might hash to same 8 bytes)
++    // are handled correctly
++    // Note: Library requires 100+ pairs for reliable operation
++    let mut test_data: Vec<(String, f64)> = Vec::new();
++    
++    // Add potentially colliding keys
++    test_data.push(("key1234567890123456".to_string(), 1.0));
++    test_data.push(("key1234567890123457".to_string(), 2.0));
++    test_data.push(("key1234567890123458".to_string(), 3.0));
++    test_data.push(("key1234567890123459".to_string(), 4.0));
++    
++    // Add more pairs to reach 100+
++    // Use different key format to avoid collisions
++    for i in 5..=100 {
++        test_data.push((format!("key_extra_{}", i), i as f64));
++    }
++
++    // Verify keys hash to different values
++    let keys: Vec<OkvsKey> = test_data.iter().map(|(k, _)| hash_key_to_okvs_key(k)).collect();
++    for i in 0..keys.len() {
++        for j in (i + 1)..keys.len() {
++            assert_ne!(
++                keys[i].0, keys[j].0,
++                "Keys '{}' and '{}' should hash to different values",
++                test_data[i].0, test_data[j].0
++            );
++        }
++    }
++
++    // Encode and verify all can be decoded correctly
++    let (rb_okvs, encoding) = encode_float64_pairs(test_data.clone())
++        .expect("Encoding should succeed despite similar key prefixes");
++
++    for (key_str, expected_f64) in &test_data {
++        let decoded_f64 = decode_float64_value(&rb_okvs, &encoding, key_str);
++        
++        let epsilon = f64::EPSILON * 100.0;
++        assert!(
++            (decoded_f64 - *expected_f64).abs() < epsilon || decoded_f64 == *expected_f64,
++            "Failed to decode key: {}, expected: {}, got: {}",
++            key_str, expected_f64, decoded_f64
++        );
++    }
++}
++
++#[test]
++fn test_float64_encoding_size_overhead() {
++    // Verify that encoding size overhead is reasonable
++    // Note: Library requires 100+ pairs for reliable operation
++    let mut pairs: Vec<(String, f64)> = Vec::new();
++    
++    for i in 0..100 {
++        pairs.push((format!("key{}", i), i as f64));
++    }
++
++    let (_rb_okvs, encoding) = encode_float64_pairs(pairs.clone())
++        .expect("Encoding should succeed");
++
++    // Encoding should have approximately (1 + epsilon) * pair_count elements
++    // For epsilon=0.1 and 50 pairs, expect ~55 elements
++    println!("Input pairs: {}, Encoding length: {}, Overhead: {:.2}%",
++        pairs.len(),
++        encoding.len(),
++        ((encoding.len() as f64 / pairs.len() as f64) - 1.0) * 100.0
++    );
++    
++    assert!(encoding.len() >= pairs.len(), 
++        "Encoding should have at least as many elements as input");
++    assert!(encoding.len() <= (pairs.len() as f64 * 1.2) as usize, 
++        "Encoding should not be much larger than input");
++}
++

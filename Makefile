@@ -4,7 +4,7 @@
 	test-pir-integration test-okvs-unit test-okvs-integration test-pir-okvs \
 	bench bench-store bench-server bench-pir bench-okvs \
 	test-no-cgo fmt test-runtime test-cluster test-multi-worker test-load \
-	test-degree-collector
+	test-degree-collector apply-patches submodule-init
 
 # Go parameters
 GOCMD=go
