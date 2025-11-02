@@ -1,0 +1,58 @@
+# Degree Collector Algorithm Configuration
+# This is a 2-round algorithm that collects vertex degrees
+
+algorithm_name: degree-collector
+algorithm_type: exact
+
+# Silhouette-db server address
+server_address: "127.0.0.1:9090"
+
+# Worker configuration
+worker_config:
+  num_workers: 3
+  worker_id: "worker-0"  # Change this for different workers: "worker-0", "worker-1", "worker-2"
+  # Optional: Custom vertex-to-worker assignment
+  # vertex_assignment:
+  #   0: "worker-0"
+  #   1: "worker-0"
+  #   2: "worker-1"
+
+# Graph input configuration
+graph_config:
+  # Option 1: Load from file (space or tab separated: u v [weight])
+  format: "edgelist"
+  
+  # Local testing mode: if true, loads from partitioned files based on worker_id
+  # (e.g., data/1.txt for worker-0, data/2.txt for worker-1)
+  # If false, uses file_path directly (deployment mode where each worker
+  # has its own graph file with the same path/name)
+  local_testing: true  # Set to false for deployment
+  
+  # For local_testing=true: Base directory containing partitioned files (e.g., "data")
+  # For local_testing=false: Full path to the graph file (same for all workers)
+  file_path: "data"  # For local testing: directory containing 1.txt, 2.txt, etc.
+  # file_path: "/path/to/graph.txt"  # For deployment: full path to graph file
+  
+  # Option 2: Specify edges directly in config (alternative to file_path)
+  # edges:
+  #   - u: 0
+  #     v: 1
+  #   - u: 1
+  #     v: 2
+  #   - u: 2
+  #     v: 0
+  #   - u: 0
+  #     v: 2
+  
+  # Whether graph is directed (for degree calculation)
+  directed: false  # Set to true for directed graphs
+
+# Algorithm-specific parameters
+parameters:
+  # Number of rounds (must be >= 2 for degree-collector)
+  num_rounds: 2
+  
+  # Optional: Custom result file path
+  # result_file: "degree_results_worker-0.txt"
+  # If not specified, defaults to: degree_collector_results_<worker_id>.txt
+

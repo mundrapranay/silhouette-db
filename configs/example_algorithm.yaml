@@ -1,0 +1,68 @@
+# Example Algorithm Configuration
+# This file demonstrates the configuration format for running graph algorithms
+
+algorithm_name: shortest_path
+algorithm_type: exact  # Options: "exact" or "ledp"
+
+# Silhouette-db server address
+server_address: "127.0.0.1:9090"
+
+# Worker configuration
+worker_config:
+  num_workers: 5
+  worker_id: "worker-0"
+  # Optional: Custom vertex-to-worker assignment
+  # vertex_assignment:
+  #   0: "worker-0"
+  #   1: "worker-0"
+  #   2: "worker-1"
+  #   ...
+
+# Graph input configuration
+graph_config:
+  # Option 1: Load from file
+  format: "edgelist"  # Options: "edgelist", "adjacency_list"
+  
+  # Local testing mode: if true, loads from partitioned files based on worker_id
+  # (e.g., data/1.txt for worker-0, data/2.txt for worker-1)
+  # If false, uses file_path directly (deployment mode)
+  local_testing: true  # Set to false for deployment
+  
+  # For local_testing=true: Base directory containing partitioned files (e.g., "data")
+  # For local_testing=false: Full path to the graph file (same for all workers)
+  file_path: "data"  # For local testing: directory containing 1.txt, 2.txt, etc.
+  # file_path: "/path/to/graph.txt"  # For deployment: full path to graph file
+  
+  # Option 2: Specify edges directly in config
+  # edges:
+  #   - u: 0
+  #     v: 1
+  #     w: 1.5  # Optional weight
+  #   - u: 1
+  #     v: 2
+  #   - u: 2
+  #     v: 0
+  
+  # Number of vertices (auto-detected if not specified)
+  # num_vertices: 100
+  
+  # Whether graph is directed
+  directed: false
+
+# Algorithm-specific parameters
+parameters:
+  # Number of rounds to execute
+  num_rounds: 10
+  
+  # Algorithm-specific parameters
+  # Example for shortest path:
+  # source_vertex: 0
+  # 
+  # Example for PageRank:
+  # damping_factor: 0.85
+  # tolerance: 1e-6
+  #
+  # Example for LEDP algorithms:
+  # epsilon: 1.0  # Privacy parameter
+  # delta: 1e-5  # Privacy parameter
+

@@ -1,9 +1,10 @@
-.PHONY: proto build build-client build-multi-worker-test build-load-test build-tools test clean run deps \
+.PHONY: proto build build-client build-multi-worker-test build-load-test build-algorithm-runner build-tools test clean run deps \
 	build-pir clean-pir test-pir \
 	build-okvs clean-okvs test-okvs \
 	test-pir-integration test-okvs-unit test-okvs-integration test-pir-okvs \
 	bench bench-store bench-server bench-pir bench-okvs \
-	test-no-cgo fmt test-runtime test-cluster test-multi-worker test-load
+	test-no-cgo fmt test-runtime test-cluster test-multi-worker test-load \
+	test-degree-collector
 
 # Go parameters
 GOCMD=go
@@ -100,6 +101,13 @@ build-load-test:
 	$(GOBUILD) -tags cgo -o $(BINARY_DIR)/load-test ./cmd/load-test
 	@echo "Build complete: $(BINARY_DIR)/load-test"
 
+# Build algorithm runner
+build-algorithm-runner:
+	@echo "Building algorithm runner..."
+	@mkdir -p $(BINARY_DIR)
+	$(GOBUILD) -tags cgo -o $(BINARY_DIR)/algorithm-runner ./cmd/algorithm-runner
+	@echo "Build complete: $(BINARY_DIR)/algorithm-runner"
+
 # Run tests (with cgo for PIR)
 test:
 	@echo "Running tests..."
@@ -192,6 +200,11 @@ test-multi-worker:
 test-load:
 	@echo "Running load tests..."
 	@./scripts/test-load.sh $(or $(SERVER),127.0.0.1:9090) $(or $(NUM_ROUNDS),10) $(or $(PAIRS),150) $(or $(WORKERS),5) $(or $(QPS),10.0) $(or $(DURATION),30)
+
+# Test degree-collector algorithm
+test-degree-collector:
+	@echo "Running degree-collector tests..."
+	@./scripts/test-degree-collector.sh
 
 # Clean build artifacts
 clean: clean-pir clean-okvs
