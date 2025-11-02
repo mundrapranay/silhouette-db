@@ -206,6 +206,19 @@ test-degree-collector:
 	@echo "Running degree-collector tests..."
 	@./scripts/test-degree-collector.sh
 
+# Submodule and patch management
+submodule-init:
+	@echo "Initializing submodules..."
+	@git submodule update --init --recursive
+	@echo "Applying patches to submodules..."
+	@./scripts/apply-patches.sh
+	@echo "Submodules initialized and patches applied"
+
+apply-patches:
+	@echo "Applying patches to submodules..."
+	@./scripts/apply-patches.sh
+	@echo "Patches applied"
+
 # Clean build artifacts
 clean: clean-pir clean-okvs
 	@echo "Cleaning..."
