@@ -10,6 +10,55 @@ FrodoPIR provides Private Information Retrieval (PIR) functionality, allowing cl
 2. **Go cgo Bindings** (`internal/crypto/pir.go`) - Go interface to the Rust FFI
 3. **Server/Client Integration** - Usage in the gRPC server and client library
 
+## Architecture Design
+
+### Architecture Challenge
+
+**FrodoPIR:**
+- Queries by row index (0, 1, 2, ...)
+- Database is array of base64-encoded strings
+- Each query targets a specific index
+
+**silhouette-db:**
+- Stores key-value pairs
+- Uses OKVS for oblivious storage
+- Queries by key (string), not index
+
+### Solution: Two-Phase Storage
+
+**Phase 1: Raw Key-Value Storage (for PIR)**
+Before OKVS encoding, we maintain a sequential array of key-value pairs:
+- Index 0: (key1, value1)
+- Index 1: (key2, value2)
+- ...
+
+This array serves as the FrodoPIR database.
+
+**Phase 2: OKVS Encoding (for Oblivious Storage)**
+After PIR setup, encode into OKVS blob for compact storage.
+
+### Integration Flow
+
+**Server Side (Setup):**
+1. Collect all key-value pairs from workers
+2. Create mapping: `key -> index`
+3. Convert pairs to base64-encoded strings array
+4. Initialize FrodoPIR Shard from this array
+5. Extract BaseParams (serialized) for clients
+6. Store:
+   - FrodoPIR Shard (in memory for query processing)
+   - BaseParams (serialized) for client distribution
+   - OKVS blob (for compact storage)
+   - Key-to-index mapping (for client queries)
+
+**Client Side (Query):**
+1. Client downloads BaseParams from server
+2. Client wants key "foo" - needs to know its index
+3. Client requests index from server (or downloads mapping)
+4. Client generates PIR query for that index
+5. Server processes query using Shard
+6. Client decodes response
+
 ## Building
 
 ### Prerequisites
@@ -391,14 +440,14 @@ go test -tags cgo -bench=BenchmarkPIR_ShardCreation -benchmem ./internal/server/
 - If retries fail, consider adjusting PIR parameters
 - See "Overflow Error and Retry Logic" section above for details
 
-## Next Steps
+## Implementation Steps
 
 1. ✅ Rust FFI wrapper created
 2. ✅ Go cgo bindings implemented
-3. ⏳ Server integration (store shards per round)
-4. ⏳ Client integration (key-to-index mapping)
-5. ⏳ End-to-end testing
-6. ⏳ Performance benchmarking
+3. ✅ Server integration (store shards per round)
+4. ✅ Client integration (key-to-index mapping)
+5. ✅ End-to-end testing
+6. ✅ Performance benchmarking
 
 ## References
 

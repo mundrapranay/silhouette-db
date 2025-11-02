@@ -12,6 +12,16 @@ When running algorithms:
 - Set `local_testing: true` in config → Loads from `data/{worker_index+1}.txt`
 - Set `local_testing: false` in config → Loads from `file_path` directly (deployment mode)
 
+## Automatic Vertex Assignment
+
+The graph generation script **automatically updates the config file** with vertex assignments:
+- When you run `generate_graph.py`, it computes vertex-to-worker assignments
+- The assignments are written to `worker_config.vertex_assignment` in the config file
+- This ensures all workers use the same vertex assignment, matching the graph partitioning
+- Algorithms read this assignment from the config, avoiding recomputation
+
+**Note**: The vertex assignment is computed deterministically (round-robin by default), so all workers will arrive at the same assignment even if they recompute it.
+
 ## Graph Generation
 
 ### `generate_graph.py`

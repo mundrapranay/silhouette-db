@@ -34,9 +34,9 @@ The algorithms framework provides a structure for implementing round-based synch
          ▼                               ▼
 ┌──────────────────┐          ┌──────────────────┐
 │  Exact Algorithms│          │  LEDP Algorithms │
-│  - shortest_path │          │  - pagerank-ledp│
+│  - shortest_path │          │  - pagerank-ledp │
 │  - pagerank      │          │  - sssp-ledp     │
-│  - bfs           │          │  - ...          │
+│  - bfs           │          │  - ...           │
 └──────────────────┘          └──────────────────┘
          │                               │
          └───────────────┬───────────────┘
@@ -88,24 +88,36 @@ worker_config:
   num_workers: 5
   worker_id: "worker-0"
   # Optional: Custom vertex-to-worker assignment
+  # (Automatically added by graph generation script)
   # vertex_assignment:
   #   0: "worker-0"
   #   1: "worker-0"
+  #   2: "worker-1"
 
 # Required: Graph input configuration
 graph_config:
   # Option 1: Load from file
   format: "edgelist"  # or "adjacency_list"
-  file_path: "/path/to/graph.txt"
   
-  # Option 2: Specify edges directly
+  # Local testing mode: if true, loads from partitioned files based on worker_id
+  # (e.g., data/1.txt for worker-0, data/2.txt for worker-1)
+  # If false, uses file_path directly (deployment mode where each worker
+  # has its own graph file with the same path/name)
+  local_testing: true  # Set to false for deployment
+  
+  # For local_testing=true: Base directory containing partitioned files (e.g., "data")
+  # For local_testing=false: Full path to the graph file (same for all workers)
+  file_path: "data"  # For local testing: directory containing 1.txt, 2.txt, etc.
+  # file_path: "/path/to/graph.txt"  # For deployment: full path to graph file
+  
+  # Option 2: Specify edges directly in config (alternative to file_path)
   # edges:
   #   - u: 0
   #     v: 1
   #     w: 1.5  # Optional weight
   
   # Optional: Number of vertices (auto-detected if not specified)
-  num_vertices: 100
+  # num_vertices: 100
   
   # Required: Whether graph is directed
   directed: false
@@ -146,6 +158,129 @@ make build-algorithm-runner
 # With verbose logging
 ./bin/algorithm-runner -config configs/shortest_path.yaml -verbose
 ```
+
+## Local Testing vs Deployment
+
+The framework supports two modes for graph data loading:
+
+### Local Testing Mode
+
+For local development and testing, graphs are partitioned into multiple files (one per worker):
+
+**Configuration:**
+```yaml
+graph_config:
+  format: "edgelist"
+  local_testing: true  # Enable local testing mode
+  file_path: "data"    # Base directory containing partitioned files
+  directed: false
+```
+
+**How it works:**
+- Each worker loads from a partitioned file based on its `worker_id`
+- Worker-0 loads from `data/1.txt`
+- Worker-1 loads from `data/2.txt`
+- Worker-N loads from `data/{N+1}.txt`
+- All partitioned files are in the same directory (`data/`)
+
+**Graph Generation:**
+The graph generation script (`data-generation/generate_graph.py`) automatically:
+1. Generates a random undirected graph
+2. Assigns vertices to workers (deterministically, round-robin by default)
+3. Partitions edges based on vertex ownership (edge goes to worker that owns source vertex)
+4. Writes partitioned files to `data/1.txt`, `data/2.txt`, etc.
+5. Updates the config file with `vertex_assignment` mapping
+
+```bash
+# Generate partitioned graph for local testing
+python3 data-generation/generate_graph.py \
+    --config configs/degree_collector.yaml \
+    --num-vertices 20 \
+    --num-edges 30 \
+    --seed 42 \
+    --output-dir data
+
+# This creates:
+# - data/1.txt (edges for worker-0)
+# - data/2.txt (edges for worker-1)
+# - data/3.txt (edges for worker-2)
+# Also updates config with vertex_assignment like:
+#   vertex_assignment:
+#     '0': worker-0
+#     '1': worker-1
+#     '2': worker-2
+#     ...
+```
+
+**Note:** For undirected graphs, each edge `(u, v)` is stored twice: as `(u, v)` and `(v, u)` in the partitioned files. The edge `(u, v)` goes to the worker that owns vertex `u`, and `(v, u)` goes to the worker that owns vertex `v`.
+
+**Example:**
+```bash
+# Step 1: Generate partitioned graph
+python3 data-generation/generate_graph.py \
+    --config configs/degree_collector.yaml \
+    --num-vertices 100 \
+    --num-edges 200 \
+    --seed 42
+
+# Step 2: Run workers (each loads from its partition)
+./bin/algorithm-runner -config configs/degree_collector_worker-0.yaml &
+./bin/algorithm-runner -config configs/degree_collector_worker-1.yaml &
+./bin/algorithm-runner -config configs/degree_collector_worker-2.yaml &
+```
+
+### Deployment Mode
+
+For production deployment, each worker/server has its own complete graph file:
+
+**Configuration:**
+```yaml
+graph_config:
+  format: "edgelist"
+  local_testing: false  # Deployment mode
+  file_path: "/data/graphs/main_graph.txt"  # Full path to graph file
+  directed: false
+```
+
+**How it works:**
+- Each worker loads from the same file path
+- All workers have access to the complete graph
+- Graph files are stored on each server/worker's local filesystem
+- Suitable for distributed deployment where each node has its own data
+
+**Example:**
+```bash
+# Each worker loads from /data/graphs/main_graph.txt
+# (file is stored locally on each worker's machine)
+./bin/algorithm-runner -config configs/shortest_path_worker-0.yaml
+```
+
+### Vertex Assignment
+
+The `vertex_assignment` configuration maps vertices to workers:
+
+```yaml
+worker_config:
+  num_workers: 3
+  worker_id: "worker-0"
+  vertex_assignment:
+    '0': worker-0  # Vertex 0 assigned to worker-0
+    '1': worker-1  # Vertex 1 assigned to worker-1
+    '2': worker-2  # Vertex 2 assigned to worker-2
+    '3': worker-0  # Vertex 3 assigned to worker-0
+    # ...
+```
+
+**Important Notes:**
+- **Automatically generated**: The graph generation script (`generate_graph.py`) automatically computes and adds `vertex_assignment` to the config file
+- **Consistency**: All workers use the same assignment (ensures correctness)
+- **Deterministic**: Assignment is computed deterministically (round-robin by default)
+- **Matching partition**: The assignment matches how edges are partitioned into files
+
+**Without config assignment:**
+If `vertex_assignment` is not provided, algorithms recompute it deterministically using the same rules (round-robin: `vertexID % numWorkers`), ensuring consistency.
+
+For more details, see the [Graph Generation README](../data-generation/README.md).
 
 ### Listing Available Algorithms
 
@@ -248,13 +383,36 @@ All algorithms must implement:
 - `ProcessRound`: Process aggregated round results
 - `GetResult`: Return final algorithm result
 
+## Testing Algorithms
+
+For testing algorithms locally, use the automated test scripts:
+
+```bash
+# Test degree-collector algorithm (with local testing mode)
+./scripts/test-degree-collector.sh
+
+# Custom parameters
+NUM_WORKERS=5 NUM_VERTICES=100 NUM_EDGES=200 ./scripts/test-degree-collector.sh
+```
+
+The test script:
+1. Generates partitioned graph files (`data/1.txt`, `data/2.txt`, etc.)
+2. Updates config with vertex assignments
+3. Starts silhouette-db server
+4. Runs all workers with appropriate configs
+5. Verifies results
+
+For more details, see the [Testing Guide](./testing.md).
+
 ## Next Steps
 
 1. ✅ Directory structure created
 2. ✅ Algorithm interface defined
 3. ✅ Configuration system implemented
 4. ✅ Entry point (algorithm-runner) created
-5. ⏳ Implement actual algorithms:
+5. ✅ Local testing support implemented
+6. ✅ Graph generation and partitioning automated
+7. ⏳ Implement actual algorithms:
    - Exact: shortest path, BFS, PageRank
    - LEDP: private shortest path, private PageRank
 

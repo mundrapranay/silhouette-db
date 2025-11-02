@@ -204,6 +204,11 @@ git clone https://github.com/brave-experiments/frodo-pir.git third_party/frodo-p
 - [ ] Structured logging (consider using zap or logrus)
 - [ ] Metrics and observability (Prometheus metrics)
 - [ ] Configuration file parsing (HCL or YAML)
+  - [ ] Implement HCL config file parser for server (`configs/node1.hcl`, `node2.hcl`, `node3.hcl`)
+  - [ ] Add `-config` flag to `silhouette-server` to load config from file
+  - [ ] Parse HCL files and map to existing command-line flags
+  - [ ] Update documentation to reflect config file usage
+  - [ ] Currently server only accepts command-line flags; HCL files exist but are unused
 - [ ] Health check endpoints
 - [ ] Graceful shutdown
 - [ ] Documentation
@@ -331,6 +336,11 @@ git submodule update --init --recursive
    - [ ] Health check endpoints
    - [ ] Graceful shutdown
    - [ ] Configuration file parsing (HCL or YAML)
+     - [ ] Implement HCL config file parser for server (`configs/node1.hcl`, `node2.hcl`, `node3.hcl`)
+     - [ ] Add `-config` flag to `silhouette-server` to load config from file
+     - [ ] Parse HCL files and map to existing command-line flags
+     - [ ] Update documentation to reflect config file usage
+     - [ ] Currently server only accepts command-line flags; HCL files exist but are unused
    - [ ] API rate limiting
    - [ ] Request/response validation
 
@@ -362,7 +372,10 @@ All FrodoPIR integration tasks are complete:
 
 2. **Configuration Format:**
    - HCL (HashiCorp Config Language) - aligns with HashiCorp Raft
-   - YAML - more common
+     - ⚠️ **Note:** HCL config files (`configs/node1.hcl`, `node2.hcl`, `node3.hcl`) currently exist but are **not used** by the server
+     - Server currently only accepts command-line flags (`-node-id`, `-listen-addr`, etc.)
+     - TODO: Implement HCL parsing to load server config from files
+   - YAML - more common (used for algorithm configs)
    - JSON - simple but less readable
 
 3. **Logging:**

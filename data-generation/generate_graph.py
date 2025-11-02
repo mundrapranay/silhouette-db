@@ -125,6 +125,12 @@ def load_config(config_file: str) -> dict:
         return yaml.safe_load(f)
 
 
+def save_config(config_file: str, config: dict):
+    """Save algorithm configuration to YAML file."""
+    with open(config_file, 'w') as f:
+        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Generate random graphs and partition them for workers'
@@ -207,6 +213,21 @@ def main():
     
     # Assign vertices to workers
     vertex_assignment = assign_vertices(num_vertices, num_workers, custom_vertex_assignment)
+    
+    # Convert vertex assignment to config format (vertex_id -> "worker-X")
+    # Config expects string keys (YAML compatibility)
+    config_vertex_assignment = {}
+    for vertex_id, worker_idx in vertex_assignment.items():
+        config_vertex_assignment[str(vertex_id)] = f"worker-{worker_idx}"
+    
+    # Update config with vertex assignment
+    if 'worker_config' not in config:
+        config['worker_config'] = {}
+    config['worker_config']['vertex_assignment'] = config_vertex_assignment
+    
+    # Save updated config back to file
+    save_config(args.config, config)
+    print(f"\n✓ Updated config file with vertex assignment: {args.config}")
     
     # Print vertex assignment statistics
     worker_vertex_counts = {}

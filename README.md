@@ -36,7 +36,17 @@ The system consists of:
 │   └── store/               # Raft FSM and store
 ├── pkg/client/              # Client library for workers
 ├── configs/                 # Configuration files
-└── GUIDE.md                 # Detailed design guide
+├── guides/                  # Documentation guides
+│   ├── guide.md             # Complete software engineering design guide
+│   ├── setup.md             # Setup and installation guide
+│   ├── algorithms.md        # Algorithms framework documentation
+│   ├── testing.md           # Testing guide (manual, automated, algorithms)
+│   ├── pir-integration.md   # FrodoPIR integration guide
+│   ├── okvs-integration-plan.md  # OKVS integration plan and status
+│   ├── benchmarks.md        # Performance benchmarks
+│   ├── implementation-plan.md    # Implementation plan and roadmap
+│   └── next-steps.md        # Next steps and future work
+└── README.md                # This file
 ```
 
 ## Quick Start
@@ -61,7 +71,12 @@ make build
 make build-algorithm-runner
 
 # Run the server
-./bin/silhouette-server -config configs/node1.hcl
+./bin/silhouette-server \
+    -node-id=node1 \
+    -listen-addr=127.0.0.1:8080 \
+    -grpc-addr=127.0.0.1:9090 \
+    -data-dir=./data/node1 \
+    -bootstrap
 
 # Run an algorithm
 ./bin/algorithm-runner -config configs/example_algorithm.yaml
@@ -79,7 +94,23 @@ make build-algorithm-runner
 
 ## Documentation
 
-See [GUIDE.md](./GUIDE.md) for the complete software engineering design guide.
+Comprehensive documentation is available in the [`guides/`](./guides/) directory:
+
+- **[Complete Design Guide](./guides/guide.md)** - Software engineering design guide and architecture overview
+- **[Setup Guide](./guides/setup.md)** - Installation and setup instructions
+- **[Algorithms Guide](./guides/algorithms.md)** - Graph algorithms framework documentation
+- **[Testing Guide](./guides/testing.md)** - Comprehensive testing guide including:
+  - Manual testing procedures
+  - Automated test scripts
+  - Algorithm-specific testing (e.g., degree-collector)
+  - Test coverage and status
+- **[PIR Integration Guide](./guides/pir-integration.md)** - FrodoPIR integration documentation
+- **[OKVS Integration Plan](./guides/okvs-integration-plan.md)** - OKVS integration plan and status
+- **[Benchmarks](./guides/benchmarks.md)** - Performance benchmarks and results
+- **[Implementation Plan](./guides/implementation-plan.md)** - Implementation roadmap and progress
+- **[Next Steps](./guides/next-steps.md)** - Future work and next steps
+
+For quick reference, see the [Complete Design Guide](./guides/guide.md).
 
 ## License
 

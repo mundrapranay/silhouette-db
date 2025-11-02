@@ -80,7 +80,7 @@ func (a *DegreeCollector) Initialize(ctx context.Context, graphData *common.Grap
 	a.vertexAssign = make(map[int]string)
 	a.myVertices = []int{}
 
-	// Get custom vertex assignment if provided
+	// Get vertex assignment from config if provided (automatically added by graph generation script)
 	var customAssign map[int]string
 	if assign, ok := config["vertex_assignment"].(map[string]interface{}); ok {
 		customAssign = make(map[int]string)
@@ -105,15 +105,23 @@ func (a *DegreeCollector) Initialize(ctx context.Context, graphData *common.Grap
 	}
 
 	// Assign vertices to workers
+	// If vertex_assignment is provided in config (from graph generation), use it directly.
+	// Otherwise, compute assignment deterministically (same as graph generation).
 	for vertexID := range vertexSet {
 		var assignedWorker string
+
+		// Check if assignment is already provided in config (from graph generation)
 		if customAssign != nil {
 			if w, exists := customAssign[vertexID]; exists {
+				// Use assignment from config
 				assignedWorker = w
 			} else {
+				// Vertex not in config assignment, compute deterministically
+				// This handles vertices that appear in edges but weren't in original graph
 				assignedWorker = common.GetVertexAssignment(vertexID, a.numWorkers, customAssign)
 			}
 		} else {
+			// No config assignment, compute deterministically (same as graph generation)
 			assignedWorker = common.GetVertexAssignment(vertexID, a.numWorkers, nil)
 		}
 
