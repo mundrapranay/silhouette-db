@@ -34,21 +34,39 @@ This document provides step-by-step instructions to set up the development envir
 
 ## Initial Setup
 
-### 1. Initialize Git Repository (if not already done)
+### 1. Clone the Repository
 
 ```bash
-cd /path/to/silhouette-db
-git init
+git clone https://github.com/mundrapranay/silhouette-db.git
+cd silhouette-db
 ```
 
-### 2. Download Dependencies
+### 2. Initialize Submodules and Apply Patches
+
+**Important:** The `rb-okvs` submodule requires patches to be applied for the codebase to work correctly.
+
+```bash
+# Option 1: Use Makefile target (recommended)
+make submodule-init
+
+# Option 2: Manual initialization
+git submodule update --init --recursive
+./scripts/apply-patches.sh
+```
+
+The `submodule-init` target will:
+1. Initialize all git submodules
+2. Update them to the correct commits
+3. Apply necessary patches (including feature gate fix for rb-okvs)
+
+### 3. Download Go Dependencies
 
 ```bash
 go mod download
 go mod tidy
 ```
 
-### 3. Generate Protocol Buffer Code
+### 4. Generate Protocol Buffer Code
 
 ```bash
 make proto
@@ -56,7 +74,13 @@ make proto
 
 This will generate the Go code from `api/v1/silhouette.proto` into `api/v1/`.
 
-### 4. Verify Build
+### 5. Verify Build
+
+```bash
+make build
+```
+
+Or manually:
 
 ```bash
 go build ./...
@@ -64,40 +88,50 @@ go build ./...
 
 If this succeeds, your setup is complete!
 
-## Setting Up FrodoPIR Submodule
+## Submodule Management
 
-### Option 1: If Git Repository is Initialized
+The project uses git submodules for third-party dependencies:
+
+- **FrodoPIR**: `third_party/frodo-pir` - Private Information Retrieval library
+- **RB-OKVS**: `third_party/rb-okvs` - Oblivious Key-Value Store library
+
+### Initializing Submodules
+
+Submodules are automatically initialized when using `make submodule-init`, but you can also initialize them manually:
 
 ```bash
-# Add frodo-pir as a submodule
-git submodule add https://github.com/brave-experiments/frodo-pir.git third_party/frodo-pir
-
-# Initialize and update submodules
+# Initialize all submodules
 git submodule update --init --recursive
+
+# Apply patches (required for rb-okvs)
+./scripts/apply-patches.sh
 ```
 
-### Option 2: Clone Without Submodule Support
+### Applying Patches
+
+Some submodules require patches to work with this project:
+
+- **rb-okvs**: Requires feature gate fix and tests directory
+
+Patches are stored in `patches/rb-okvs/` and are automatically applied by `scripts/apply-patches.sh`.
+
+To manually apply patches:
 
 ```bash
-# Create directory
-mkdir -p third_party
-
-# Clone the repository
-git clone https://github.com/brave-experiments/frodo-pir.git third_party/frodo-pir
+cd third_party/rb-okvs
+git apply ../../patches/rb-okvs/0001-feature-gate-fix-and-tests.patch
 ```
 
-### Option 3: Manual Download
+### Updating Submodules
 
-If you prefer not to use git submodules:
+To update submodules to the latest upstream versions:
 
 ```bash
-mkdir -p third_party
-cd third_party
-# Download and extract frodo-pir manually, or
-wget https://github.com/brave-experiments/frodo-pir/archive/refs/heads/main.zip
-unzip main.zip
-mv frodo-pir-main frodo-pir
+git submodule update --remote --recursive
+./scripts/apply-patches.sh  # Reapply patches after update
 ```
+
+**Note:** After updating submodules, patches may need to be recreated if upstream changes conflict with local modifications.
 
 ## Building the Project
 
