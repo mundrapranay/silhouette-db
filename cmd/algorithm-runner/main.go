@@ -76,10 +76,10 @@ func main() {
 	initConfig["worker_id"] = config.WorkerConfig.WorkerID
 	initConfig["num_workers"] = config.WorkerConfig.NumWorkers
 	if len(config.WorkerConfig.VertexAssignment) > 0 {
-		// Convert map[int]string to map[string]interface{} for YAML compatibility
+		// Convert map[string]string to map[string]interface{} for algorithm initialization
 		vertexAssign := make(map[string]interface{})
 		for k, v := range config.WorkerConfig.VertexAssignment {
-			vertexAssign[fmt.Sprintf("%d", k)] = v
+			vertexAssign[k] = v
 		}
 		initConfig["vertex_assignment"] = vertexAssign
 	}

@@ -134,7 +134,8 @@ type WorkerConfig struct {
 
 	// Assignment of vertices to workers (optional)
 	// If not specified, vertices are assigned round-robin
-	VertexAssignment map[int]string `yaml:"vertex_assignment" json:"vertex_assignment"`
+	// Note: Keys are strings in YAML (for compatibility), but represent vertex IDs
+	VertexAssignment map[string]string `yaml:"vertex_assignment" json:"vertex_assignment"`
 }
 
 // GraphInputConfig specifies how to load the graph

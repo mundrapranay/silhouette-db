@@ -404,6 +404,161 @@ The test script:
 
 For more details, see the [Testing Guide](./testing.md).
 
+## Implemented Algorithms
+
+### Exact Algorithms
+
+#### degree-collector
+
+A simple 2-round algorithm that collects and distributes vertex degrees:
+
+- **Round 1**: Each worker publishes (vertex_id, degree) pairs for its assigned vertices
+- **Round 2**: Each worker queries degrees of its vertices' neighbors and writes results to file
+
+**Configuration Example:**
+```yaml
+algorithm_name: degree-collector
+algorithm_type: exact
+parameters:
+  num_rounds: 2
+```
+
+**Use Case**: Demonstrates basic OKVS/PIR usage for exact graph algorithms
+
+### LEDP Algorithms
+
+#### kcore-decomposition
+
+A Local Edge Differentially Private (LEDP) algorithm for k-core decomposition of graphs. The algorithm computes approximate k-core numbers while preserving edge-level differential privacy.
+
+**Algorithm Description:**
+
+The k-core decomposition algorithm identifies the coreness of each vertex in a graph. A k-core of a graph is the maximal subgraph in which all vertices have degree at least k. The algorithm uses a round-based synchronous approach with LEDP guarantees.
+
+**Round Structure:**
+
+- **Round 0 (Initial Exchange)**: 
+  - Workers publish noised degrees for their assigned vertices
+  - Server aggregates all degrees
+  - Algorithm computes maximum round threshold based on maximum degree
+  - All workers agree on the number of rounds: `min(number_of_rounds-2, maxPublicRoundThreshold)`
+
+- **Algorithm Rounds (Round 1 to Round N)**:
+  Each algorithm round consists of two phases:
+  - **Phase 1 (Publish Increases)**: 
+    - Workers query neighbor levels from previous round (via PIR from OKVS)
+    - Workers compute whether vertex levels should increase based on noised neighbor counts
+    - Workers publish level increases → OKVS
+  - **Phase 2 (Update Levels)**:
+    - Workers query aggregated level increases from Phase 1 (via PIR from OKVS)
+    - Workers compute new levels: `new_level = old_level + increase`
+    - Workers publish updated levels → OKVS (source for next round)
+
+**Privacy Guarantees:**
+
+- Uses geometric noise distribution for LEDP
+- Privacy budget split: `epsilon * factor` for degree publication, `epsilon * (1 - factor)` for neighbor count queries
+- All level queries and updates are performed via PIR (oblivious queries)
+- LDS (Level Data Structure) is stored entirely in OKVS (no local copies)
+
+**Data Storage in OKVS:**
+
+- Initial degrees: `degree-{vertexID}` → noised_degree (float64)
+- Level increases: `level-increase-{vertexID}-round-{r}` → 1.0 or 0.0 (float64)
+- Current levels: `level-{vertexID}` → level (float64, stored in OKVS)
+- Max threshold: `max-threshold` → maxPublicRoundThreshold (float64)
+- Round count: `rounds-total` → number_of_rounds (float64)
+
+**Configuration Parameters:**
+
+```yaml
+algorithm_name: kcore-decomposition
+algorithm_type: ledp
+server_address: 127.0.0.1:9090
+worker_config:
+  num_workers: 3
+  worker_id: worker-0
+graph_config:
+  format: edgelist
+  local_testing: true
+  file_path: data
+  directed: false
+parameters:
+  # Graph size (required)
+  n: 100  # Number of vertices
+  
+  # Privacy parameters (required)
+  psi: 0.1        # Privacy parameter for LEDP (typically 0.1-0.5)
+  epsilon: 1.0    # Total privacy budget (typically 0.1-2.0)
+  factor: 0.5     # Privacy budget split (0.0-1.0)
+                   # epsilon*factor for step 1 (degree publication)
+                   # epsilon*(1-factor) for step 2 (neighbor queries)
+  
+  # Noise parameters (optional)
+  noise: true     # Enable noise (required for LEDP)
+  bias: false     # Enable bias correction
+  bias_factor: 0  # Bias factor (if bias=true)
+  
+  # Output file (optional)
+  result_file: kcore_results_worker-0.txt  # Default: kcore_results_{worker_id}.txt
+```
+
+**Mathematical Constants (Preserved from Original):**
+
+- `levels_per_group = ceil(log(n, 1+psi)) / 4`
+- `rounds_param = ceil(4.0 * pow(log(n, 1+psi), 1.2))`
+- `lambda = 0.5` (for core number estimation)
+- `group_index = floor(level / levels_per_group)`
+- `threshold = pow(1+psi, group_index)` (for level increase decision)
+- Core number: `(2+lambda) * pow(1+psi, power)` where `power = max(floor((level+1)/levels_per_group)-1, 0)`
+
+**Output Format:**
+
+Results are written to `result_file` (default: `kcore_results_{worker_id}.txt`) in the format:
+```
+vertex_id: estimated_core_number
+0: 5.2341
+1: 3.4567
+2: 7.8901
+...
+```
+
+Each worker writes results only for its assigned vertices.
+
+**Key Features:**
+
+- ✅ Fully distributed (no coordinator needed)
+- ✅ Oblivious queries via PIR
+- ✅ All data stored in OKVS (no local LDS copies)
+- ✅ Synchronous rounds determined upfront
+- ✅ Preserves theoretical guarantees (all mathematical constants match original)
+
+**Example Usage:**
+
+```bash
+# Step 1: Generate partitioned graph
+python3 data-generation/generate_graph.py \
+    --config configs/kcore_decomposition.yaml \
+    --num-vertices 100 \
+    --num-edges 200 \
+    --seed 42
+
+# Step 2: Run workers (in separate terminals or via script)
+./bin/algorithm-runner -config configs/kcore_decomposition_worker-0.yaml &
+./bin/algorithm-runner -config configs/kcore_decomposition_worker-1.yaml &
+./bin/algorithm-runner -config configs/kcore_decomposition_worker-2.yaml &
+```
+
+**Testing:**
+
+The algorithm can be tested using the same local testing infrastructure as other algorithms. See the [Testing Guide](./testing.md) for details.
+
+**References:**
+
+- Original k-core decomposition implementation (channel-based coordinator)
+- LEDP (Local Edge Differentially Private) guarantees
+- Theoretical analysis of privacy-preserving graph algorithms
+
 ## Next Steps
 
 1. ✅ Directory structure created
@@ -412,7 +567,10 @@ For more details, see the [Testing Guide](./testing.md).
 4. ✅ Entry point (algorithm-runner) created
 5. ✅ Local testing support implemented
 6. ✅ Graph generation and partitioning automated
-7. ⏳ Implement actual algorithms:
+7. ✅ Implemented algorithms:
+   - Exact: degree-collector
+   - LEDP: kcore-decomposition
+8. ⏳ Additional algorithms:
    - Exact: shortest path, BFS, PageRank
    - LEDP: private shortest path, private PageRank
 

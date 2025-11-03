@@ -3,6 +3,7 @@ module github.com/mundrapranay/silhouette-db
 go 1.24.0
 
 require (
+	github.com/google/differential-privacy/go/v2 v2.1.0
 	github.com/hashicorp/raft v1.6.1
 	github.com/hashicorp/raft-boltdb/v2 v2.2.0
 	google.golang.org/grpc v1.76.0
@@ -14,6 +15,7 @@ require (
 	github.com/armon/go-metrics v0.4.1 // indirect
 	github.com/boltdb/bolt v1.3.1 // indirect
 	github.com/fatih/color v1.13.0 // indirect
+	github.com/golang/glog v1.2.5 // indirect
 	github.com/hashicorp/go-hclog v1.6.2 // indirect
 	github.com/hashicorp/go-immutable-radix v1.0.0 // indirect
 	github.com/hashicorp/go-msgpack v0.5.5 // indirect

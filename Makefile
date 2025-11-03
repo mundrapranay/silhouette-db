@@ -4,7 +4,7 @@
 	test-pir-integration test-okvs-unit test-okvs-integration test-pir-okvs \
 	bench bench-store bench-server bench-pir bench-okvs \
 	test-no-cgo fmt test-runtime test-cluster test-multi-worker test-load \
-	test-degree-collector apply-patches submodule-init
+	test-degree-collector test-kcore-decomposition apply-patches submodule-init
 
 # Go parameters
 GOCMD=go
@@ -205,6 +205,10 @@ test-load:
 test-degree-collector:
 	@echo "Running degree-collector tests..."
 	@./scripts/test-degree-collector.sh
+
+test-kcore-decomposition:
+	@echo "Running k-core-decomposition test..."
+	@./scripts/test-kcore-decomposition.sh
 
 # Submodule and patch management
 submodule-init:
