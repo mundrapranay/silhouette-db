@@ -61,12 +61,15 @@ if lsof -Pi :9090 -sTCP:LISTEN -t >/dev/null 2>&1; then
     SERVER_PID=""
 else
     # Start server using command-line flags
+    # Use OKVS backend for k-core (requires 100+ pairs)
+    STORAGE_BACKEND=${STORAGE_BACKEND:-okvs}
     ./bin/silhouette-server \
         -node-id=test-node \
         -listen-addr=127.0.0.1:8080 \
         -grpc-addr="$SERVER_ADDR" \
         -data-dir="$TEST_DIR/node1" \
-        -bootstrap=true > "$TEST_DIR/server.log" 2>&1 &
+        -bootstrap=true \
+        -storage-backend="$STORAGE_BACKEND" > "$TEST_DIR/server.log" 2>&1 &
     SERVER_PID=$!
     echo "Server started (PID: $SERVER_PID)"
     

@@ -1,3 +1,4 @@
+// (moved executeRoundSingle below imports)
 package ledp
 
 import (
@@ -220,6 +221,109 @@ func (a *KCoreDecomposition) Initialize(ctx context.Context, graphData *common.G
 	return nil
 }
 
+// executeRoundSingle performs a single get-then-set round:
+// - Reads levels from round r-1 (or defaults to 0 for r=0)
+// - Computes next levels based on neighbor counts and thresholds
+// - Publishes updated levels to round r
+func (a *KCoreDecomposition) executeRoundSingle(ctx context.Context, dbClient *client.Client, r int) error {
+	roundID := uint64(r)
+
+	// Start round r
+	if err := dbClient.StartRound(ctx, roundID, int32(a.numWorkers)); err != nil {
+		return fmt.Errorf("failed to start round %d: %w", roundID, err)
+	}
+
+	// Previous round for reading levels
+	var prevLevelRoundID uint64
+	if r <= 0 {
+		prevLevelRoundID = 0
+	} else {
+		prevLevelRoundID = uint64(r - 1)
+	}
+
+	levelUpdates := make(map[string][]byte)
+
+	for _, vertexID := range a.myVertices {
+		vertex := a.vertices[vertexID]
+
+		// Read current level from previous round (or default 0)
+		var currentLevel uint = 0
+		if r > 0 {
+			levelKey := fmt.Sprintf("level-%d", vertexID)
+			if levelBytes, err := dbClient.GetValue(ctx, prevLevelRoundID, levelKey); err == nil {
+				currentLevel = uint(bytesToFloat64(levelBytes))
+			}
+		}
+
+		// Respect threshold and permanent stop
+		if int(currentLevel) >= vertex.round_threshold || vertex.permanent_zero == 0 {
+			vertex.permanent_zero = 0
+			levelUpdates[fmt.Sprintf("level-%d", vertexID)] = float64ToBytes(float64(currentLevel))
+			continue
+		}
+
+		// Count neighbors at same level from previous round
+		neighborCount := 0
+		for _, neighborID := range vertex.neighbours {
+			neighborKey := fmt.Sprintf("level-%d", neighborID)
+			var neighborLevel uint = 0
+			if r > 0 {
+				if b, err := dbClient.GetValue(ctx, prevLevelRoundID, neighborKey); err == nil {
+					neighborLevel = uint(bytesToFloat64(b))
+				}
+			}
+			if neighborLevel == currentLevel {
+				neighborCount++
+			}
+		}
+
+		// Apply noise (same logic as original)
+		noisedNeighborCount := int64(neighborCount)
+		if a.noise {
+			scale := a.super_step2_geom_factor / (2.0 * float64(vertex.round_threshold))
+			geomDist := noise.NewGeomDistribution(scale)
+			noiseSampled := geomDist.TwoSidedGeometric()
+			extraBias := int64(3.0 * (2.0 * math.Exp(scale)) / math.Pow((math.Exp(2.0*scale)-1.0), 3.0))
+			noisedNeighborCount += noiseSampled
+			noisedNeighborCount += extraBias
+		}
+
+		// Threshold using group index derived from current level
+		vGroupIdx := uint(math.Floor(float64(currentLevel) / a.levels_per_group))
+		threshold := math.Pow(1.0+a.psi, float64(vGroupIdx))
+
+		newLevel := currentLevel
+		if noisedNeighborCount > int64(threshold) {
+			newLevel = currentLevel + 1
+		} else {
+			vertex.permanent_zero = 0
+		}
+
+		// Publish updated level for this round
+		levelUpdates[fmt.Sprintf("level-%d", vertexID)] = float64ToBytes(float64(newLevel))
+		vertex.current_level = newLevel
+	}
+
+	// Publish levels → OKVS for round r
+	if err := dbClient.PublishValues(ctx, roundID, a.workerID, levelUpdates); err != nil {
+		return fmt.Errorf("failed to publish level updates: %w", err)
+	}
+
+	// Wait for round completion
+	maxRetries := 100
+	retryDelay := 50 * time.Millisecond
+	for retry := 0; retry < maxRetries; retry++ {
+		if err := dbClient.InitializePIRClient(ctx, roundID); err == nil {
+			break
+		}
+		if retry < maxRetries-1 {
+			time.Sleep(retryDelay)
+		}
+	}
+
+	return nil
+}
+
 // Execute runs the k-core decomposition algorithm
 func (a *KCoreDecomposition) Execute(ctx context.Context, dbClient *client.Client, numRounds int) (*common.AlgorithmResult, error) {
 	startTime := time.Now()
@@ -229,19 +333,13 @@ func (a *KCoreDecomposition) Execute(ctx context.Context, dbClient *client.Clien
 		return nil, fmt.Errorf("round 0 (initial exchange) failed: %w", err)
 	}
 
-	// Execute algorithm rounds (1 to number_of_rounds)
-	// Each algorithm round = 2 silhouette-db rounds (publish increases, update levels)
+	// Execute algorithm rounds using single get-then-set per round
+	// Round r reads levels from round r-1 (or 0s for r=0) and writes updated levels to round r
 	algorithmRounds := min(a.number_of_rounds-2, a.maxPublicRoundThreshold)
 
 	for round := 0; round < algorithmRounds; round++ {
-		// Round 2r+1: Publish level increases
-		if err := a.executeRoundPublishIncreases(ctx, dbClient, round); err != nil {
-			return nil, fmt.Errorf("round %d (publish increases) failed: %w", round, err)
-		}
-
-		// Round 2r+2: Query aggregated increases and update levels
-		if err := a.executeRoundUpdateLevels(ctx, dbClient, round); err != nil {
-			return nil, fmt.Errorf("round %d (update levels) failed: %w", round, err)
+		if err := a.executeRoundSingle(ctx, dbClient, round); err != nil {
+			return nil, fmt.Errorf("round %d (single update) failed: %w", round, err)
 		}
 	}
 
@@ -400,8 +498,9 @@ func (a *KCoreDecomposition) executeRound0(ctx context.Context, dbClient *client
 
 // executeRoundPublishIncreases executes the publish phase for level increases
 func (a *KCoreDecomposition) executeRoundPublishIncreases(ctx context.Context, dbClient *client.Client, algorithmRound int) error {
-	// Round ID for this phase: 2*algorithmRound + 1
-	roundID := uint64(2*algorithmRound + 1)
+	// Deprecated in single-round mode
+	// Keep for compatibility if needed by callers (unused now)
+	roundID := uint64(algorithmRound)
 
 	// Start round
 	if err := dbClient.StartRound(ctx, roundID, int32(a.numWorkers)); err != nil {
@@ -418,19 +517,14 @@ func (a *KCoreDecomposition) executeRoundPublishIncreases(ctx context.Context, d
 	for _, vertexID := range a.myVertices {
 		vertex := a.vertices[vertexID]
 
-		// Check if this vertex's threshold is reached
-		if vertex.round_threshold == algorithmRound {
-			vertex.permanent_zero = 0
-		}
-
 		// Query current level for this vertex from the previous update round
 		if algorithmRound == 0 {
 			// Initial round: all levels start at 0
 			vertex.current_level = 0
 		} else {
-			// Query level from previous update round (where levels were last published)
-			// Previous update round: 2*(algorithmRound-1)+2 = 2*algorithmRound
-			prevLevelRoundID := uint64(2 * algorithmRound)
+			// Query level from the previous coordination round's update
+			// Round r reads levels written in round r-1
+			prevLevelRoundID := uint64(algorithmRound)
 			levelKey := fmt.Sprintf("level-%d", vertexID)
 			levelBytes, err := dbClient.GetValue(ctx, prevLevelRoundID, levelKey)
 			if err == nil {
@@ -440,17 +534,21 @@ func (a *KCoreDecomposition) executeRoundPublishIncreases(ctx context.Context, d
 			}
 		}
 
-		// Query neighbor levels if this vertex is active in this round
-		if vertex.current_level == uint(algorithmRound) && vertex.permanent_zero != 0 {
+		// If threshold already reached, permanently stop processing this vertex
+		if int(vertex.current_level) >= vertex.round_threshold {
+			vertex.permanent_zero = 0
+		}
+
+		// Query neighbor levels if this vertex is still active this round
+		if vertex.permanent_zero != 0 {
 			for _, neighborID := range vertex.neighbours {
 				neighborKey := fmt.Sprintf("level-%d", neighborID)
 				if algorithmRound == 0 {
 					// Initial levels are all 0.0 (no previous round to query from)
 					neighborLevels[neighborID] = 0
 				} else {
-					// Query neighbor level from previous update round (where levels were last published)
-					// Previous update round: 2*(algorithmRound-1)+2 = 2*algorithmRound
-					prevLevelRoundID := uint64(2 * algorithmRound)
+					// Query neighbor level from previous coordination round's update
+					prevLevelRoundID := uint64(algorithmRound)
 					neighborLevelBytes, err := dbClient.GetValue(ctx, prevLevelRoundID, neighborKey)
 					if err == nil {
 						neighborLevels[neighborID] = uint(bytesToFloat64(neighborLevelBytes))
@@ -464,18 +562,17 @@ func (a *KCoreDecomposition) executeRoundPublishIncreases(ctx context.Context, d
 
 	// Compute level increases (same logic as original workerKCore)
 	levelIncreases := make(map[string][]byte)
-	// Compute group_index directly (same formula as LDS.GroupForLevel)
-	group_index := uint(math.Floor(float64(algorithmRound) / a.levels_per_group))
+	// group_index will be computed per-vertex from its current level (LDS group)
 
 	for _, vertexID := range a.myVertices {
 		vertex := a.vertices[vertexID]
 
-		// Only vertices at current round level with permanent_zero=1 can potentially increase
-		if vertex.current_level == uint(algorithmRound) && vertex.permanent_zero != 0 {
+		// Process vertices that haven't permanently stopped and haven't reached their threshold
+		if vertex.permanent_zero != 0 && int(vertex.current_level) < vertex.round_threshold {
 			// Count neighbors at same level
 			neighbor_count := 0
 			for _, neighborID := range vertex.neighbours {
-				if neighborLevels[neighborID] == uint(algorithmRound) {
+				if neighborLevels[neighborID] == vertex.current_level {
 					neighbor_count++
 				}
 			}
@@ -493,7 +590,9 @@ func (a *KCoreDecomposition) executeRoundPublishIncreases(ctx context.Context, d
 
 			// Compute threshold (same formula as original workerKCore)
 			// Original: math.Pow((1+psi), group_index)
-			threshold := math.Pow(1.0+a.psi, float64(group_index))
+			// Use group_index derived from the vertex's current level (LDS group for level)
+			vGroupIdx := uint(math.Floor(float64(vertex.current_level) / a.levels_per_group))
+			threshold := math.Pow(1.0+a.psi, float64(vGroupIdx))
 			increaseKey := fmt.Sprintf("level-increase-%d-round-%d", vertexID, algorithmRound+1)
 
 			if noised_neighbor_count > int64(threshold) {
@@ -533,8 +632,9 @@ func (a *KCoreDecomposition) executeRoundPublishIncreases(ctx context.Context, d
 
 // executeRoundUpdateLevels executes the update phase for level updates
 func (a *KCoreDecomposition) executeRoundUpdateLevels(ctx context.Context, dbClient *client.Client, algorithmRound int) error {
-	// Round ID for this phase: 2*algorithmRound + 2
-	roundID := uint64(2*algorithmRound + 2)
+	// Deprecated in single-round mode
+	// Keep for compatibility if needed by callers (unused now)
+	roundID := uint64(algorithmRound)
 
 	// Start round
 	if err := dbClient.StartRound(ctx, roundID, int32(a.numWorkers)); err != nil {
@@ -546,8 +646,8 @@ func (a *KCoreDecomposition) executeRoundUpdateLevels(ctx context.Context, dbCli
 
 	// Determine where to query current levels from:
 	// - For algorithm round 0: initial levels are 0 (no round to query from)
-	// - For algorithm round > 0: query from previous update round (2*(algorithmRound-1)+2 = 2*algorithmRound)
-	prevLevelRoundID := uint64(2 * algorithmRound) // Round where levels were last updated
+	// - For algorithm round > 0: query from previous coordination round's update (round r-1)
+	prevLevelRoundID := uint64(algorithmRound) // Round where levels were last updated
 
 	levelUpdates := make(map[string][]byte)
 
@@ -623,8 +723,13 @@ func (a *KCoreDecomposition) executeRoundUpdateLevels(ctx context.Context, dbCli
 // computeCoreNumbers computes final core numbers from levels (same formula as original estimateCoreNumbers)
 func (a *KCoreDecomposition) computeCoreNumbers(ctx context.Context, dbClient *client.Client, algorithmRounds int) error {
 	// Query final levels from OKVS
-	// Last round where levels were updated: 2*algorithmRounds (since each algorithm round = 2 rounds)
-	finalRoundID := uint64(2 * algorithmRounds)
+	// Last round where levels were updated is the last executed round (algorithmRounds-1)
+	var finalRoundID uint64
+	if algorithmRounds <= 0 {
+		finalRoundID = 0
+	} else {
+		finalRoundID = uint64(algorithmRounds - 1)
+	}
 
 	// Same constants as original estimateCoreNumbers
 	two_plus_lambda := 2.0 + a.lambda

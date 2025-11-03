@@ -5,7 +5,6 @@ package server
 
 import (
 	"context"
-	"encoding/binary"
 	"net"
 	"testing"
 	"time"
@@ -50,7 +49,7 @@ func setupTestServerWithRBOKVS(t *testing.T) (*grpc.Server, *Server, *store.Stor
 
 	// Use RB-OKVS encoder (requires cgo)
 	okvsEncoder := crypto.NewRBOKVSEncoder()
-	server := NewServer(s, okvsEncoder)
+	server := NewServer(s, okvsEncoder, "okvs")
 
 	// Start gRPC server on random port
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
@@ -72,13 +71,6 @@ func setupTestServerWithRBOKVS(t *testing.T) (*grpc.Server, *Server, *store.Stor
 	return grpcSrv, server, s, addr
 }
 
-// float64ToBytes converts float64 to 8-byte little-endian bytes
-func float64ToBytes(f float64) []byte {
-	bytes := make([]byte, 8)
-	binary.LittleEndian.PutUint64(bytes, *(*uint64)(unsafe.Pointer(&f)))
-	return bytes
-}
-
 // TestRBOKVSIntegration_MinimumPairs tests OKVS encoding with minimum required pairs (100)
 func TestRBOKVSIntegration_MinimumPairs(t *testing.T) {
 	grpcSrv, _, store, _ := setupTestServerWithRBOKVS(t)
@@ -95,7 +87,7 @@ func TestRBOKVSIntegration_MinimumPairs(t *testing.T) {
 		ExpectedWorkers: expectedWorkers,
 	}
 
-	server := NewServer(store, crypto.NewRBOKVSEncoder())
+	server := NewServer(store, crypto.NewRBOKVSEncoder(), "okvs")
 	_, err := server.StartRound(ctx, startReq)
 	if err != nil {
 		t.Fatalf("StartRound failed: %v", err)

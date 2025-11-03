@@ -95,3 +95,12 @@ Verify that:
 3. Verify levels are updating correctly across rounds
 4. If issues persist, add debug logging to trace level updates
 
+
+
+here is the actual algorithm:
+round 0 LDS : [0,0,0,0]
+round 0 workers process node 1, 2 to move up a level 
+round 1 LDS : [1,1,0,0]
+and so on...
+
+so in each round we post the update as and read the last value before changing it. So we can also do a simple get and set. and we process a node not based on it's current level, but rahter we check if the currect level == threshold for that node, if that's the case we stop processing, or if we have once set it to not move in any of the previous rounds, then it will not move in the subsequent rounds 

@@ -18,8 +18,9 @@ import (
 type Server struct {
 	apiv1.UnimplementedCoordinationServiceServer
 
-	store       *store.Store
-	okvsEncoder crypto.OKVSEncoder
+	store          *store.Store
+	okvsEncoder    crypto.OKVSEncoder
+	storageBackend string // "okvs" or "kvs"
 
 	// Round management
 	roundsMu        sync.RWMutex
@@ -31,9 +32,9 @@ type Server struct {
 	roundBaseParams map[uint64][]byte         // BaseParams for each round (for client distribution)
 	roundKeyMapping map[uint64]map[string]int // key-to-index mapping per round
 
-	// OKVS storage per round
-	okvsBlobs    map[uint64][]byte                // OKVS-encoded blobs per round
-	okvsDecoders map[uint64]*crypto.RBOKVSDecoder // OKVS decoders per round
+	// Storage per round (OKVS or KVS)
+	storageBlobs    map[uint64][]byte             // Encoded blobs per round (OKVS or KVS)
+	storageDecoders map[uint64]crypto.OKVSDecoder // Decoders per round (interface type)
 }
 
 // roundState tracks the state of a round during the publish phase.
@@ -44,17 +45,22 @@ type roundState struct {
 }
 
 // NewServer creates a new gRPC server instance.
-func NewServer(s *store.Store, okvsEncoder crypto.OKVSEncoder) *Server {
+// storageBackend must be "okvs" or "kvs"
+func NewServer(s *store.Store, okvsEncoder crypto.OKVSEncoder, storageBackend string) *Server {
+	if storageBackend == "" {
+		storageBackend = "okvs" // Default to OKVS
+	}
 	return &Server{
 		store:           s,
 		okvsEncoder:     okvsEncoder,
+		storageBackend:  storageBackend,
 		roundData:       make(map[uint64]*roundState),
 		expectedWorkers: make(map[uint64]int32),
 		pirServers:      make(map[uint64]*crypto.FrodoPIRServer),
 		roundBaseParams: make(map[uint64][]byte),
 		roundKeyMapping: make(map[uint64]map[string]int),
-		okvsBlobs:       make(map[uint64][]byte),
-		okvsDecoders:    make(map[uint64]*crypto.RBOKVSDecoder),
+		storageBlobs:    make(map[uint64][]byte),
+		storageDecoders: make(map[uint64]crypto.OKVSDecoder),
 	}
 }
 
@@ -154,41 +160,63 @@ func (s *Server) PublishValues(ctx context.Context, req *apiv1.PublishValuesRequ
 			return &apiv1.PublishValuesResponse{Success: true}, nil
 		}
 
-		// Check if we have enough pairs for OKVS encoding (minimum 100 pairs)
-		// If we have fewer pairs, we'll skip OKVS encoding and use direct PIR
-		useOKVS := len(allPairs) >= 100
-
-		var okvsBlob []byte
-		var okvsDecoder *crypto.RBOKVSDecoder
+		// Use storage backend based on configuration
+		var storageBlob []byte
+		var storageDecoder crypto.OKVSDecoder
 		var pirPairs map[string][]byte
 		var err error
 
-		if useOKVS {
+		if s.storageBackend == "okvs" {
 			// Encode using OKVS
 			// Note: RB-OKVS requires:
 			// - Minimum 100 key-value pairs
 			// - Values must be exactly 8 bytes (float64, little-endian)
-			okvsBlob, err = s.okvsEncoder.Encode(allPairs)
+			if len(allPairs) < 100 {
+				return nil, status.Errorf(codes.InvalidArgument, "OKVS requires at least 100 pairs, got %d", len(allPairs))
+			}
+			storageBlob, err = s.okvsEncoder.Encode(allPairs)
 			if err != nil {
 				return nil, status.Errorf(codes.Internal, "failed to encode OKVS: %v", err)
 			}
 
 			// Create OKVS decoder for this round
-			okvsDecoder = crypto.NewRBOKVSDecoder(okvsBlob)
+			storageDecoder = crypto.NewRBOKVSDecoder(storageBlob)
 
 			// For PIR, we need to decode all values from OKVS to create the PIR database
 			// This maintains the oblivious property: the PIR database contains OKVS-decoded values
 			pirPairs = make(map[string][]byte, len(allPairs))
 			for _, key := range keys {
-				decodedValue, err := okvsDecoder.Decode(okvsBlob, key)
+				decodedValue, err := storageDecoder.Decode(storageBlob, key)
 				if err != nil {
 					return nil, status.Errorf(codes.Internal, "failed to decode OKVS value for key %s: %v", key, err)
 				}
 				pirPairs[key] = decodedValue
 			}
+		} else if s.storageBackend == "kvs" {
+			// Encode using simple KVS (KVS encoder should be used for KVS backend)
+			// Note: okvsEncoder is actually a KVSEncoder when backend is "kvs"
+			storageBlob, err = s.okvsEncoder.Encode(allPairs)
+			if err != nil {
+				return nil, status.Errorf(codes.Internal, "failed to encode KVS: %v", err)
+			}
+
+			// Create KVS decoder for this round
+			storageDecoder, err = crypto.NewKVSDecoder(storageBlob)
+			if err != nil {
+				return nil, status.Errorf(codes.Internal, "failed to create KVS decoder: %v", err)
+			}
+
+			// For PIR, decode all values from KVS to create the PIR database
+			pirPairs = make(map[string][]byte, len(allPairs))
+			for _, key := range keys {
+				decodedValue, err := storageDecoder.Decode(storageBlob, key)
+				if err != nil {
+					return nil, status.Errorf(codes.Internal, "failed to decode KVS value for key %s: %v", key, err)
+				}
+				pirPairs[key] = decodedValue
+			}
 		} else {
-			// Use raw pairs directly for PIR (when fewer than 100 pairs)
-			pirPairs = allPairs
+			return nil, status.Errorf(codes.InvalidArgument, "invalid storage backend: %s (must be 'okvs' or 'kvs')", s.storageBackend)
 		}
 
 		// Create FrodoPIR server for this round
@@ -224,35 +252,18 @@ func (s *Server) PublishValues(ctx context.Context, req *apiv1.PublishValuesRequ
 			return nil, status.Errorf(codes.Internal, "failed to create FrodoPIR server: %v", err)
 		}
 
-		// Store FrodoPIR server, OKVS blob/decoder, and metadata
+		// Store FrodoPIR server, storage blob/decoder, and metadata
 		s.roundsMu.Lock()
 		s.pirServers[req.RoundId] = pirServer
 		s.roundBaseParams[req.RoundId] = baseParams
 		s.roundKeyMapping[req.RoundId] = keyToIndex
-		if useOKVS {
-			s.okvsBlobs[req.RoundId] = okvsBlob
-			s.okvsDecoders[req.RoundId] = okvsDecoder
-		}
+		s.storageBlobs[req.RoundId] = storageBlob
+		s.storageDecoders[req.RoundId] = storageDecoder
 		s.roundsMu.Unlock()
 
 		// Store in Raft cluster
 		roundKey := fmt.Sprintf("round_%d_results", req.RoundId)
-		// If OKVS was used, store OKVS blob; otherwise store raw pairs (serialized)
-		var storageData []byte
-		if useOKVS {
-			storageData = okvsBlob
-		} else {
-			// For < 100 pairs, serialize raw pairs (simple format for now)
-			// In production, you might want a more efficient serialization
-			var rawData []byte
-			for _, key := range keys {
-				rawData = append(rawData, []byte(key)...)
-				rawData = append(rawData, byte(':'))
-				rawData = append(rawData, allPairs[key]...)
-				rawData = append(rawData, byte('\n'))
-			}
-			storageData = rawData
-		}
+		storageData := storageBlob
 		if err := s.store.Set(roundKey, storageData); err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to store round data: %v", err)
 		}

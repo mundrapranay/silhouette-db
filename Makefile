@@ -2,9 +2,11 @@
 	build-pir clean-pir test-pir \
 	build-okvs clean-okvs test-okvs \
 	test-pir-integration test-okvs-unit test-okvs-integration test-pir-okvs \
+	test-kvs test-kvs-integration bench-kvs bench-kvs-vs-okvs \
 	bench bench-store bench-server bench-pir bench-okvs \
 	test-no-cgo fmt test-runtime test-cluster test-multi-worker test-load \
-	test-degree-collector test-kcore-decomposition apply-patches submodule-init
+	test-degree-collector test-kcore-decomposition test-e2e-backends \
+	apply-patches submodule-init
 
 # Go parameters
 GOCMD=go
@@ -161,6 +163,24 @@ bench-pir:
 bench-okvs:
 	@echo "Running OKVS benchmarks..."
 	$(GOTEST) -tags cgo -bench=BenchmarkOKVS -benchmem -run=^$$ ./internal/crypto/...
+
+# KVS tests and benchmarks
+test-kvs:
+	@echo "Running KVS tests..."
+	$(GOTEST) -v ./internal/crypto/... -run TestKVS
+	$(GOTEST) -v ./internal/server/... -run TestServer_KVS
+
+test-kvs-integration:
+	@echo "Running KVS integration tests..."
+	@./scripts/test-kvs.sh
+
+bench-kvs:
+	@echo "Running KVS benchmarks..."
+	$(GOTEST) -bench=BenchmarkKVS -benchmem -run=^$$ ./internal/crypto/...
+
+bench-kvs-vs-okvs:
+	@echo "Running KVS vs OKVS comparison benchmarks..."
+	$(GOTEST) -tags cgo -bench=BenchmarkKVS_vs_OKVS -benchmem -run=^$$ ./internal/crypto/...
 	$(GOTEST) -tags cgo -bench=BenchmarkOKVS -benchmem -run=^$$ ./internal/server/...
 
 # Format code
@@ -209,6 +229,11 @@ test-degree-collector:
 test-kcore-decomposition:
 	@echo "Running k-core-decomposition test..."
 	@./scripts/test-kcore-decomposition.sh
+
+# End-to-end tests with both backends
+test-e2e-backends:
+	@echo "Running end-to-end tests with both backends..."
+	@./scripts/test-e2e-backends.sh
 
 # Submodule and patch management
 submodule-init:

@@ -7,13 +7,19 @@ import (
 	"time"
 
 	apiv1 "github.com/mundrapranay/silhouette-db/api/v1"
+	"github.com/mundrapranay/silhouette-db/internal/crypto"
 	"github.com/mundrapranay/silhouette-db/internal/store"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
 // setupTestServerWithGRPC sets up a complete server with gRPC endpoint
-func setupTestServerWithGRPC(t *testing.T) (*grpc.Server, *Server, *store.Store, string) {
+// backend can be "okvs" or "kvs" (defaults to "okvs")
+func setupTestServerWithGRPC(t *testing.T, backend string) (*grpc.Server, *Server, *store.Store, string) {
+	if backend == "" {
+		backend = "okvs" // Default to OKVS
+	}
+
 	tmpDir := t.TempDir()
 
 	config := store.Config{
@@ -42,8 +48,13 @@ func setupTestServerWithGRPC(t *testing.T) (*grpc.Server, *Server, *store.Store,
 		}
 	}
 
-	okvsEncoder := &mockOKVSEncoder{}
-	server := NewServer(s, okvsEncoder)
+	var encoder crypto.OKVSEncoder
+	if backend == "kvs" {
+		encoder = crypto.NewKVSEncoder()
+	} else {
+		encoder = &mockOKVSEncoder{}
+	}
+	server := NewServer(s, encoder, backend)
 
 	// Start gRPC server on random port
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
@@ -75,7 +86,7 @@ func createTestClient(t *testing.T, addr string) apiv1.CoordinationServiceClient
 }
 
 func TestRoundLifecycle_EndToEnd(t *testing.T) {
-	grpcSrv, _, store, addr := setupTestServerWithGRPC(t)
+	grpcSrv, _, store, addr := setupTestServerWithGRPC(t, "okvs")
 	defer grpcSrv.Stop()
 	defer store.Shutdown()
 
@@ -153,7 +164,7 @@ func TestRoundLifecycle_EndToEnd(t *testing.T) {
 }
 
 func TestRoundLifecycle_MultipleRounds(t *testing.T) {
-	grpcSrv, _, store, addr := setupTestServerWithGRPC(t)
+	grpcSrv, _, store, addr := setupTestServerWithGRPC(t, "okvs")
 	defer grpcSrv.Stop()
 	defer store.Shutdown()
 
@@ -208,7 +219,7 @@ func TestRoundLifecycle_MultipleRounds(t *testing.T) {
 }
 
 func TestRoundLifecycle_ConcurrentWorkers(t *testing.T) {
-	grpcSrv, _, store, addr := setupTestServerWithGRPC(t)
+	grpcSrv, _, store, addr := setupTestServerWithGRPC(t, "okvs")
 	defer grpcSrv.Stop()
 	defer store.Shutdown()
 

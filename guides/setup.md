@@ -150,12 +150,23 @@ make build
 make run
 
 # Or manually:
+# Use OKVS backend (default, requires 100+ pairs, CGO)
 ./bin/silhouette-server \
   -node-id=node1 \
   -listen-addr=127.0.0.1:8080 \
   -grpc-addr=127.0.0.1:9090 \
   -data-dir=./data/node1 \
-  -bootstrap=true
+  -bootstrap=true \
+  -storage-backend=okvs
+
+# Or use KVS backend (any number of pairs, no CGO)
+./bin/silhouette-server \
+  -node-id=node1 \
+  -listen-addr=127.0.0.1:8080 \
+  -grpc-addr=127.0.0.1:9090 \
+  -data-dir=./data/node1 \
+  -bootstrap=true \
+  -storage-backend=kvs
 ```
 
 ### Multiple Nodes
@@ -164,23 +175,49 @@ In separate terminals:
 
 **Terminal 1 (Leader):**
 ```bash
+# All nodes must use the same storage backend
 ./bin/silhouette-server \
   -node-id=node1 \
   -listen-addr=127.0.0.1:8080 \
   -grpc-addr=127.0.0.1:9090 \
   -data-dir=./data/node1 \
-  -bootstrap=true
+  -bootstrap=true \
+  -storage-backend=okvs  # or kvs
 ```
 
 **Terminal 2 (Follower):**
 ```bash
+# Must use same backend as Node 1
 ./bin/silhouette-server \
   -node-id=node2 \
   -listen-addr=127.0.0.1:8081 \
   -grpc-addr=127.0.0.1:9091 \
   -data-dir=./data/node2 \
-  -join=127.0.0.1:8080
+  -join=127.0.0.1:8080 \
+  -storage-backend=okvs  # Same as Node 1
 ```
+
+**Note:** All nodes in a cluster must use the same storage backend. See [Storage Backends Guide](./storage-backends.md) for choosing the right backend.
+
+## Storage Backend Selection
+
+The server supports two storage backends:
+
+- **OKVS** (default): Oblivious key-value store, requires 100+ pairs, CGO required
+- **KVS**: Simple key-value store, works with any number of pairs, no CGO required
+
+Choose the backend using the `--storage-backend` flag:
+
+```bash
+-storage-backend=okvs  # Use OKVS (default)
+-storage-backend=kvs   # Use KVS
+```
+
+**Recommendations:**
+- Use **OKVS** for privacy-sensitive applications with 100+ pairs per round
+- Use **KVS** for testing, development, or when you have <100 pairs
+
+See [Storage Backends Guide](./storage-backends.md) for detailed comparison and usage.
 
 ## Troubleshooting
 

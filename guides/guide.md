@@ -192,9 +192,17 @@ type Store struct {
 
 ### 2. Cryptographic Layer (`internal/crypto/`)
 
-The cryptographic layer provides oblivious storage (OKVS) and private queries (PIR).
+The cryptographic layer provides storage backends (OKVS or KVS) and private queries (PIR).
 
-#### 2.1 OKVS Implementation (`internal/crypto/okvs_impl.go`)
+#### 2.1 Storage Backends
+
+**Available Backends**:
+- **OKVS** (`internal/crypto/okvs_impl.go`): Oblivious key-value store (requires 100+ pairs)
+- **KVS** (`internal/crypto/kvs.go`): Simple key-value store (works with any number of pairs)
+
+**Selection**: Server chooses backend based on `--storage-backend` flag (default: OKVS).
+
+#### 2.2 OKVS Implementation (`internal/crypto/okvs_impl.go`)
 
 **Purpose**: Encodes key-value pairs into oblivious data structures.
 
@@ -218,6 +226,7 @@ type OKVSDecoder interface {
 - Values must be exactly 8 bytes (float64, little-endian)
 - Keys are hashed to 8-byte `OkvsKey` using BLAKE2b512
 - Encoding overhead: ~10-20% (epsilon = 0.1)
+- CGO required (Rust FFI integration)
 
 **FFI Integration**:
 - Uses `cgo` to call Rust FFI library (`librbokvsffi.a`)
@@ -229,7 +238,33 @@ type OKVSDecoder interface {
 - Go slices copied to avoid memory issues
 - Thread-safe (no shared state)
 
-#### 2.2 PIR Implementation (`internal/crypto/pir.go`)
+#### 2.3 KVS Implementation (`internal/crypto/kvs.go`)
+
+**Purpose**: Provides simple, fast storage without oblivious properties.
+
+**Interface**: Implements `OKVSEncoder` and `OKVSDecoder` interfaces (same as OKVS).
+
+**Implementation**: `KVSEncoder` and `KVSDecoder`
+
+**Properties**:
+- Works with any number of pairs (no minimum requirement)
+- Values can be any size (not limited to 8 bytes)
+- Fast encoding/decoding (JSON serialization)
+- No CGO required (pure Go implementation)
+- No oblivious properties (storage format reveals keys)
+
+**Serialization Format**:
+- JSON map with base64-encoded values
+- Keys stored as strings
+- Values stored as base64-encoded strings
+
+**When to Use**:
+- Testing and development
+- Algorithms with <100 pairs
+- Non-privacy-sensitive applications
+- Performance-critical scenarios
+
+#### 2.4 PIR Implementation (`internal/crypto/pir.go`)
 
 **Purpose**: Enables private queries without revealing which key is requested.
 
@@ -834,7 +869,9 @@ When fewer than 100 pairs are published:
 
 ## Cryptographic Primitives
 
-### OKVS (Oblivious Key-Value Store)
+### Storage Backends
+
+#### OKVS (Oblivious Key-Value Store)
 
 **Purpose**: Hide which keys are stored in the database.
 
@@ -857,6 +894,36 @@ When fewer than 100 pairs are published:
 - Values must be 8 bytes (float64, little-endian)
 - Minimum 100 pairs for reliable operation
 - Encoding rate: ~10-20% overhead
+- CGO required (Rust FFI integration)
+
+**When to Use**: Privacy-sensitive applications with 100+ pairs per round.
+
+#### KVS (Simple Key-Value Store)
+
+**Purpose**: Fast, simple storage without oblivious properties.
+
+**How It Works**:
+1. Takes a set of `(key, value)` pairs
+2. Serializes them as JSON with base64-encoded values
+3. Stores the serialized blob
+4. Decodes by deserializing and looking up keys
+
+**Properties**:
+- **Speed**: Fast encoding/decoding (just JSON serialization)
+- **Flexibility**: Works with any number of pairs and value sizes
+- **Simplicity**: Easy to understand and debug
+- **No Obliviousness**: Storage format reveals which keys are stored
+
+**Implementation Details**:
+- Pure Go implementation (no CGO)
+- JSON map with base64-encoded values
+- O(1) lookup after deserialization
+- No minimum pair requirement
+- No encoding overhead
+
+**When to Use**: Testing, development, non-privacy-sensitive applications, or when you have <100 pairs.
+
+See [Storage Backends Guide](./storage-backends.md) for detailed comparison and usage.
 
 ### PIR (Private Information Retrieval)
 
@@ -888,6 +955,13 @@ When OKVS + PIR are used together:
 1. **Storage Privacy**: OKVS hides which keys are stored
 2. **Query Privacy**: PIR hides which key is queried
 3. **Complete Obliviousness**: Neither storage patterns nor query patterns are revealed
+
+When KVS + PIR are used together:
+1. **Storage Privacy**: ❌ Not provided (storage format reveals keys)
+2. **Query Privacy**: ✅ PIR hides which key is queried
+3. **Partial Privacy**: Only query patterns are hidden, not storage patterns
+
+**Recommendation**: Use OKVS + PIR for complete privacy, or KVS + PIR when storage privacy is not required.
 
 ## Algorithm Framework
 

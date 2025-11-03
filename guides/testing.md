@@ -27,7 +27,8 @@ The `silhouette-db` system is **functionally complete** and **tested**, with all
 - ✅ Edge cases: duplicates, errors, empty data, large values
 
 **Runtime Tests:**
-- ✅ Single-Node Runtime: OKVS encoding, direct PIR fallback, PIR queries
+- ✅ Single-Node Runtime: OKVS encoding, KVS encoding, direct PIR fallback, PIR queries
+- ✅ Storage Backend Tests: KVS and OKVS backend testing, comparison benchmarks
 - ✅ Multi-Node Cluster: Cluster formation, leader election, data replication, failover
 - ✅ Multi-Worker: Concurrent publishing, worker aggregation, large datasets
 - ✅ Load Testing: Concurrent rounds, high query load, system stability
@@ -352,6 +353,28 @@ worker_config:
 - Cluster remains operational
 
 #### ✅ Direct PIR Fallback in Cluster
+
+### Storage Backend Tests
+
+#### ✅ KVS Backend Testing
+- KVS encoding works with any number of pairs
+- KVS decoding works correctly
+- PIR queries work with KVS backend
+- No minimum pair requirement
+- Fast encoding/decoding performance
+
+#### ✅ OKVS Backend Testing
+- OKVS encoding works with 100+ pairs
+- OKVS decoding works correctly
+- PIR queries work with OKVS backend
+- Minimum 100 pairs enforced
+- Oblivious storage properties verified
+
+#### ✅ Backend Comparison Tests
+- Both backends work with same algorithms
+- Performance comparison benchmarks
+- End-to-end tests with both backends
+- Backend selection via command-line flag
 - Direct PIR fallback works in cluster mode
 - Graceful degradation with < 100 pairs
 
@@ -402,6 +425,78 @@ worker_config:
 - **OKVS Encoding**: ~500ms-2s for 150 pairs
 - **Round completion**: ~60-70ms for 200 pairs
 - **PIR query latency**: ~2-5ms average
+
+## Testing Storage Backends
+
+### Overview
+
+`silhouette-db` supports two storage backends:
+- **OKVS**: Oblivious key-value store (requires 100+ pairs, CGO)
+- **KVS**: Simple key-value store (any number of pairs, no CGO)
+
+Both backends can be tested independently or together for comparison.
+
+### KVS Testing
+
+```bash
+# Run KVS unit tests
+make test-kvs
+
+# Run KVS integration tests
+make test-kvs-integration
+
+# Run KVS benchmarks
+make bench-kvs
+```
+
+### OKVS Testing
+
+```bash
+# Run OKVS unit tests (requires cgo)
+make test-okvs-unit
+
+# Run OKVS integration tests (requires cgo)
+make test-okvs-integration
+
+# Run OKVS benchmarks (requires cgo)
+make bench-okvs
+```
+
+### Backend Comparison
+
+```bash
+# Compare KVS vs OKVS performance
+make bench-kvs-vs-okvs
+
+# Run end-to-end tests with both backends
+make test-e2e-backends
+```
+
+### Test Scripts with Backend Selection
+
+Test scripts support the `STORAGE_BACKEND` environment variable:
+
+```bash
+# Test degree-collector with KVS
+STORAGE_BACKEND=kvs ./scripts/test-degree-collector.sh
+
+# Test k-core-decomposition with OKVS
+STORAGE_BACKEND=okvs ./scripts/test-kcore-decomposition.sh
+```
+
+### Server Configuration
+
+The server accepts a `--storage-backend` flag:
+
+```bash
+# Use OKVS (default)
+./bin/silhouette-server -storage-backend=okvs ...
+
+# Use KVS
+./bin/silhouette-server -storage-backend=kvs ...
+```
+
+See [Storage Backends Guide](./storage-backends.md) for detailed information about choosing and using storage backends.
 
 ## Test Execution Commands
 

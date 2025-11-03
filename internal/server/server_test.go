@@ -35,7 +35,13 @@ func (m *mockPIRServer) ProcessQuery(db []byte, query []byte) ([]byte, error) {
 	return query, nil
 }
 
-func setupTestServer(t *testing.T) (*Server, *store.Store) {
+// setupTestServer creates a test server with the specified backend
+// backend can be "okvs" or "kvs" (defaults to "okvs")
+func setupTestServer(t *testing.T, backend string) (*Server, *store.Store) {
+	if backend == "" {
+		backend = "okvs" // Default to OKVS
+	}
+
 	tmpDir := t.TempDir()
 
 	config := store.Config{
@@ -64,14 +70,19 @@ func setupTestServer(t *testing.T) (*Server, *store.Store) {
 		}
 	}
 
-	okvsEncoder := &mockOKVSEncoder{}
-	server := NewServer(s, okvsEncoder)
+	var encoder crypto.OKVSEncoder
+	if backend == "kvs" {
+		encoder = crypto.NewKVSEncoder()
+	} else {
+		encoder = &mockOKVSEncoder{}
+	}
+	server := NewServer(s, encoder, backend)
 
 	return server, s
 }
 
 func TestServer_StartRound(t *testing.T) {
-	server, store := setupTestServer(t)
+	server, store := setupTestServer(t, "okvs")
 	defer store.Shutdown()
 
 	ctx := context.Background()
@@ -91,7 +102,7 @@ func TestServer_StartRound(t *testing.T) {
 }
 
 func TestServer_PublishValues(t *testing.T) {
-	server, store := setupTestServer(t)
+	server, store := setupTestServer(t, "okvs")
 	defer store.Shutdown()
 
 	ctx := context.Background()
@@ -127,7 +138,8 @@ func TestServer_PublishValues(t *testing.T) {
 }
 
 func TestServer_PublishValues_CompleteRound(t *testing.T) {
-	server, store := setupTestServer(t)
+	// Use KVS backend for this test (works with any number of pairs)
+	server, store := setupTestServer(t, "kvs")
 	defer store.Shutdown()
 
 	ctx := context.Background()
@@ -183,7 +195,8 @@ func TestServer_PublishValues_CompleteRound(t *testing.T) {
 }
 
 func TestServer_GetValue(t *testing.T) {
-	server, store := setupTestServer(t)
+	// Use KVS backend for this test (works with any number of pairs)
+	server, store := setupTestServer(t, "kvs")
 	defer store.Shutdown()
 
 	ctx := context.Background()
@@ -275,7 +288,7 @@ func TestServer_GetValue(t *testing.T) {
 }
 
 func TestServer_GetValue_NonExistentRound(t *testing.T) {
-	server, store := setupTestServer(t)
+	server, store := setupTestServer(t, "okvs")
 	defer store.Shutdown()
 
 	ctx := context.Background()

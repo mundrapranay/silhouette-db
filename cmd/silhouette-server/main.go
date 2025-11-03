@@ -18,12 +18,13 @@ import (
 )
 
 var (
-	nodeID     = flag.String("node-id", "", "Unique ID for this node")
-	listenAddr = flag.String("listen-addr", "127.0.0.1:8080", "Address to listen for Raft communication")
-	grpcAddr   = flag.String("grpc-addr", "127.0.0.1:9090", "Address to listen for gRPC API")
-	dataDir    = flag.String("data-dir", "./data", "Directory to store Raft logs and snapshots")
-	bootstrap  = flag.Bool("bootstrap", false, "Bootstrap a new cluster (first node)")
-	joinAddr   = flag.String("join", "", "Address of an existing cluster member to join")
+	nodeID         = flag.String("node-id", "", "Unique ID for this node")
+	listenAddr     = flag.String("listen-addr", "127.0.0.1:8080", "Address to listen for Raft communication")
+	grpcAddr       = flag.String("grpc-addr", "127.0.0.1:9090", "Address to listen for gRPC API")
+	dataDir        = flag.String("data-dir", "./data", "Directory to store Raft logs and snapshots")
+	bootstrap      = flag.Bool("bootstrap", false, "Bootstrap a new cluster (first node)")
+	joinAddr       = flag.String("join", "", "Address of an existing cluster member to join")
+	storageBackend = flag.String("storage-backend", "okvs", "Storage backend: 'okvs' or 'kvs' (default: okvs)")
 )
 
 func main() {
@@ -62,13 +63,22 @@ func main() {
 		log.Printf("Join address provided: %s (joining not yet implemented)", *joinAddr)
 	}
 
-	// Initialize cryptographic components
-	// Use RB-OKVS encoder (requires values to be 8 bytes float64, minimum 100 pairs)
-	okvsEncoder := crypto.NewRBOKVSEncoder()
+	// Initialize cryptographic components based on storage backend
+	var okvsEncoder crypto.OKVSEncoder
+	switch *storageBackend {
+	case "kvs":
+		okvsEncoder = crypto.NewKVSEncoder()
+		log.Printf("Using KVS (simple key-value store) backend")
+	case "okvs":
+		okvsEncoder = crypto.NewRBOKVSEncoder()
+		log.Printf("Using OKVS (oblivious key-value store) backend")
+	default:
+		log.Fatalf("Invalid storage backend: %s (must be 'okvs' or 'kvs')", *storageBackend)
+	}
 	// Note: PIR server is now created per round in server.PublishValues
 
 	// Create gRPC server
-	grpcServer := server.NewServer(s, okvsEncoder)
+	grpcServer := server.NewServer(s, okvsEncoder, *storageBackend)
 
 	// Start gRPC server
 	lis, err := net.Listen("tcp", *grpcAddr)

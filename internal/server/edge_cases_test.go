@@ -10,7 +10,7 @@ import (
 )
 
 func TestEdgeCases_DuplicateWorkerPublish(t *testing.T) {
-	grpcSrv, _, store, addr := setupTestServerWithGRPC(t)
+	grpcSrv, _, store, addr := setupTestServerWithGRPC(t, "okvs")
 	defer grpcSrv.Stop()
 	defer store.Shutdown()
 
@@ -58,7 +58,7 @@ func TestEdgeCases_DuplicateWorkerPublish(t *testing.T) {
 }
 
 func TestEdgeCases_PublishToNonExistentRound(t *testing.T) {
-	grpcSrv, _, store, addr := setupTestServerWithGRPC(t)
+	grpcSrv, _, store, addr := setupTestServerWithGRPC(t, "okvs")
 	defer grpcSrv.Stop()
 	defer store.Shutdown()
 
@@ -91,7 +91,7 @@ func TestEdgeCases_PublishToNonExistentRound(t *testing.T) {
 }
 
 func TestEdgeCases_GetValueBeforeRoundComplete(t *testing.T) {
-	grpcSrv, _, store, addr := setupTestServerWithGRPC(t)
+	grpcSrv, _, store, addr := setupTestServerWithGRPC(t, "okvs")
 	defer grpcSrv.Stop()
 	defer store.Shutdown()
 
@@ -123,7 +123,7 @@ func TestEdgeCases_GetValueBeforeRoundComplete(t *testing.T) {
 }
 
 func TestEdgeCases_EmptyPairs(t *testing.T) {
-	grpcSrv, _, store, addr := setupTestServerWithGRPC(t)
+	grpcSrv, _, store, addr := setupTestServerWithGRPC(t, "okvs")
 	defer grpcSrv.Stop()
 	defer store.Shutdown()
 
@@ -168,7 +168,7 @@ func TestEdgeCases_EmptyPairs(t *testing.T) {
 }
 
 func TestEdgeCases_LargeValue(t *testing.T) {
-	grpcSrv, _, store, addr := setupTestServerWithGRPC(t)
+	grpcSrv, _, store, addr := setupTestServerWithGRPC(t, "okvs")
 	defer grpcSrv.Stop()
 	defer store.Shutdown()
 
@@ -220,7 +220,7 @@ func TestEdgeCases_LargeValue(t *testing.T) {
 }
 
 func TestEdgeCases_ManyKeys(t *testing.T) {
-	grpcSrv, _, store, addr := setupTestServerWithGRPC(t)
+	grpcSrv, _, store, addr := setupTestServerWithGRPC(t, "okvs")
 	defer grpcSrv.Stop()
 	defer store.Shutdown()
 

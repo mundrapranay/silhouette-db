@@ -46,7 +46,7 @@ func TestPIRIntegration_EndToEnd(t *testing.T) {
 	}
 
 	okvsEncoder := &mockOKVSEncoder{}
-	server := NewServer(s, okvsEncoder)
+	server := NewServer(s, okvsEncoder, "okvs")
 	ctx := context.Background()
 
 	// Step 1: Start a round
@@ -238,7 +238,7 @@ func TestPIRIntegration_KeyMapping(t *testing.T) {
 	}
 
 	okvsEncoder := &mockOKVSEncoder{}
-	server := NewServer(s, okvsEncoder)
+	server := NewServer(s, okvsEncoder, "kvs")
 	ctx := context.Background()
 
 	// Start round

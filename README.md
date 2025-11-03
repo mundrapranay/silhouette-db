@@ -21,7 +21,8 @@
 `silhouette-db` replaces the centralized coordinator model with a distributed, peer-to-peer architecture built upon a custom, oblivious key-value store. It provides:
 
 - **Distributed Consensus**: Raft-based consensus for fault tolerance
-- **Oblivious Storage**: OKVS (Oblivious Key-Value Store) for hiding storage patterns
+- **Flexible Storage**: Choose between OKVS (Oblivious Key-Value Store) or KVS (Simple Key-Value Store)
+- **Oblivious Storage**: OKVS encoding hides which keys are stored (optional)
 - **Private Queries**: PIR (Private Information Retrieval) for query privacy
 
 ## Features
@@ -29,7 +30,7 @@
 ✨ **Core Capabilities**
 
 - 🏗️ **Fault-Tolerant**: Raft consensus ensures system availability even with node failures
-- 🔒 **Oblivious Storage**: OKVS encoding hides which keys are stored
+- 🔒 **Flexible Storage**: Choose OKVS for oblivious storage or KVS for simple, fast storage
 - 🔐 **Private Queries**: PIR enables querying without revealing which key was requested
 - 📊 **Graph Algorithms**: Round-based synchronous framework for exact and LEDP algorithms
 - 🌐 **Distributed**: Multi-node cluster support with automatic replication
@@ -55,7 +56,7 @@ The system consists of:
 │  Coordination Layer │  Distributed, oblivious key-value store
 │  (silhouette-db)    │
 │  - Raft Consensus   │
-│  - OKVS Encoding    │
+│  - Storage Backend  │  (OKVS or KVS)
 │  - PIR Queries      │
 └──────────┬──────────┘
            │
@@ -92,6 +93,7 @@ The system consists of:
 │   ├── testing.md           # Testing guide (manual, automated, algorithms)
 │   ├── pir-integration.md   # FrodoPIR integration guide
 │   ├── okvs-integration-plan.md  # OKVS integration plan and status
+│   ├── storage-backends.md  # Storage backend comparison and usage guide
 │   ├── benchmarks.md        # Performance benchmarks
 │   ├── implementation-plan.md    # Implementation plan and roadmap
 │   └── next-steps.md        # Next steps and future work
@@ -119,13 +121,23 @@ make build
 # Build algorithm runner
 make build-algorithm-runner
 
-# Run the server
+# Run the server (default: OKVS backend)
 ./bin/silhouette-server \
     -node-id=node1 \
     -listen-addr=127.0.0.1:8080 \
     -grpc-addr=127.0.0.1:9090 \
     -data-dir=./data/node1 \
-    -bootstrap
+    -bootstrap \
+    -storage-backend=okvs
+
+# Or use KVS backend for simple, fast storage
+./bin/silhouette-server \
+    -node-id=node1 \
+    -listen-addr=127.0.0.1:8080 \
+    -grpc-addr=127.0.0.1:9090 \
+    -data-dir=./data/node1 \
+    -bootstrap \
+    -storage-backend=kvs
 
 # Run an algorithm
 ./bin/algorithm-runner -config configs/example_algorithm.yaml
@@ -155,6 +167,7 @@ Comprehensive documentation is available in the [`guides/`](./guides/) directory
   - Test coverage and status
 - **[PIR Integration Guide](./guides/pir-integration.md)** - FrodoPIR integration documentation
 - **[OKVS Integration Plan](./guides/okvs-integration-plan.md)** - OKVS integration plan and status
+- **[Storage Backends Guide](./guides/storage-backends.md)** - Storage backend comparison and usage (OKVS vs KVS)
 - **[Benchmarks](./guides/benchmarks.md)** - Performance benchmarks and results
 - **[Implementation Plan](./guides/implementation-plan.md)** - Implementation roadmap and progress
 - **[Next Steps](./guides/next-steps.md)** - Future work and next steps
@@ -163,17 +176,29 @@ For quick reference, see the [Complete Design Guide](./guides/guide.md).
 
 ## Components
 
-### Cryptographic Primitives
+### Storage Backends
 
-- **RB-OKVS** (Random Band Matrix OKVS): Oblivious key-value store encoding
+- **OKVS** (Oblivious Key-Value Store): Random Band Matrix OKVS encoding
+  - Provides oblivious storage (hides which keys are stored)
   - Minimum 100 pairs required
   - ~10-20% encoding overhead
-  - Hides which keys are stored
+  - Recommended for privacy-sensitive applications
+
+- **KVS** (Simple Key-Value Store): Direct JSON-based storage
+  - Fast and simple (no encoding overhead)
+  - Works with any number of pairs (no minimum)
+  - No oblivious properties
+  - Recommended for testing or when privacy is not required
+
+Both backends work seamlessly with PIR for query privacy.
+
+### Cryptographic Primitives
 
 - **FrodoPIR**: Private Information Retrieval scheme
   - LWE-based cryptography (post-quantum secure)
   - Sub-second query responses
   - Hides which key is queried
+  - Works with both OKVS and KVS backends
 
 ### Consensus Layer
 
@@ -207,6 +232,12 @@ go test ./algorithms/...
 ./scripts/test-cluster.sh 3
 ./scripts/test-multi-worker.sh
 ./scripts/test-load.sh
+
+# Test storage backends
+make test-kvs              # Test KVS backend
+make test-kvs-integration  # KVS integration tests
+make test-okvs             # Test OKVS backend (requires cgo)
+make test-e2e-backends     # End-to-end tests with both backends
 ```
 
 See the [Testing Guide](./guides/testing.md) for comprehensive testing documentation.
