@@ -28,11 +28,12 @@ mkdir -p "$TEST_DIR"
 
 # Step 2: Verify partitioned graph files exist
 echo -e "${YELLOW}Step 2: Verifying partitioned graph files...${NC}"
+DATA_DIR="data/wiki_4"
 for i in $(seq 1 $NUM_WORKERS); do
-    if [ ! -f "data/${i}.txt" ]; then
-        echo -e "${RED}Error: Partitioned graph file data/${i}.txt not found${NC}"
+    if [ ! -f "$DATA_DIR/${i}.txt" ]; then
+        echo -e "${RED}Error: Partitioned graph file $DATA_DIR/${i}.txt not found${NC}"
         echo "Please run the partition script first:"
-        echo "  python3 data-generation/partition_existing_graph.py data/wiki_adj $NUM_WORKERS --config $CONFIG_FILE"
+        echo "  python3 data-generation/partition_existing_graph.py data/wiki_adj $NUM_WORKERS --config $CONFIG_FILE --output-dir $DATA_DIR"
         exit 1
     fi
 done

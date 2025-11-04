@@ -7123,7 +7123,7 @@ worker_config:
 graph_config:
   format: edgelist
   local_testing: true
-  file_path: data
+  file_path: data/wiki_4
   directed: false
 parameters:
   n: 7115

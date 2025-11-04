@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"log"
 	"math"
 	"os"
 	"sync"
@@ -225,8 +226,13 @@ func (a *KCoreDecomposition) Initialize(ctx context.Context, graphData *common.G
 // - Reads levels from round r-1 (or defaults to 0 for r=0)
 // - Computes next levels based on neighbor counts and thresholds
 // - Publishes updated levels to round r
+// Algorithm: In each round, read the last value before changing it (simple get and set).
+// Process a node based on: if current level == threshold, stop processing.
+// If we've set it to not move in any previous round (permanent_zero == 0), it won't move in subsequent rounds.
 func (a *KCoreDecomposition) executeRoundSingle(ctx context.Context, dbClient *client.Client, r int) error {
 	roundID := uint64(r)
+
+	log.Printf("[%s] Round %d: Starting round", a.workerID, r)
 
 	// Start round r
 	if err := dbClient.StartRound(ctx, roundID, int32(a.numWorkers)); err != nil {
@@ -242,23 +248,40 @@ func (a *KCoreDecomposition) executeRoundSingle(ctx context.Context, dbClient *c
 	}
 
 	levelUpdates := make(map[string][]byte)
+	processedCount := 0
+	stoppedCount := 0
+	increasedCount := 0
 
 	for _, vertexID := range a.myVertices {
 		vertex := a.vertices[vertexID]
 
 		// Read current level from previous round (or default 0)
+		// This is the "get" part: read the last value before changing it
 		var currentLevel uint = 0
 		if r > 0 {
 			levelKey := fmt.Sprintf("level-%d", vertexID)
 			if levelBytes, err := dbClient.GetValue(ctx, prevLevelRoundID, levelKey); err == nil {
 				currentLevel = uint(bytesToFloat64(levelBytes))
+			} else {
+				log.Printf("[%s] Round %d: Vertex %d: Could not read level from round %d, defaulting to 0", a.workerID, r, vertexID, prevLevelRoundID)
 			}
 		}
 
-		// Respect threshold and permanent stop
-		if int(currentLevel) >= vertex.round_threshold || vertex.permanent_zero == 0 {
+		// Check if vertex should stop processing:
+		// 1. If current level == threshold, stop processing
+		// 2. If permanent_zero == 0 (was set to not move in previous round), don't move in subsequent rounds
+		if int(currentLevel) == vertex.round_threshold {
+			log.Printf("[%s] Round %d: Vertex %d: Stopping - current level %d == threshold %d", a.workerID, r, vertexID, currentLevel, vertex.round_threshold)
 			vertex.permanent_zero = 0
 			levelUpdates[fmt.Sprintf("level-%d", vertexID)] = float64ToBytes(float64(currentLevel))
+			stoppedCount++
+			continue
+		}
+
+		if vertex.permanent_zero == 0 {
+			log.Printf("[%s] Round %d: Vertex %d: Stopping - permanent_zero is 0 (was set to not move previously), current level: %d", a.workerID, r, vertexID, currentLevel)
+			levelUpdates[fmt.Sprintf("level-%d", vertexID)] = float64ToBytes(float64(currentLevel))
+			stoppedCount++
 			continue
 		}
 
@@ -295,19 +318,30 @@ func (a *KCoreDecomposition) executeRoundSingle(ctx context.Context, dbClient *c
 		newLevel := currentLevel
 		if noisedNeighborCount > int64(threshold) {
 			newLevel = currentLevel + 1
+			increasedCount++
+			log.Printf("[%s] Round %d: Vertex %d: Level increased %d -> %d (neighbor_count: %d, noised: %d, threshold: %.2f, group_idx: %d)",
+				a.workerID, r, vertexID, currentLevel, newLevel, neighborCount, noisedNeighborCount, threshold, vGroupIdx)
 		} else {
+			// Set permanent_zero to 0 so it won't move in subsequent rounds
 			vertex.permanent_zero = 0
+			log.Printf("[%s] Round %d: Vertex %d: Not increasing - neighbor_count: %d, noised: %d, threshold: %.2f (setting permanent_zero=0)",
+				a.workerID, r, vertexID, neighborCount, noisedNeighborCount, threshold)
 		}
 
-		// Publish updated level for this round
+		// Publish updated level for this round (this is the "set" part)
 		levelUpdates[fmt.Sprintf("level-%d", vertexID)] = float64ToBytes(float64(newLevel))
 		vertex.current_level = newLevel
+		processedCount++
 	}
+
+	log.Printf("[%s] Round %d: Processed %d vertices, %d increased, %d stopped", a.workerID, r, processedCount, increasedCount, stoppedCount)
 
 	// Publish levels → OKVS for round r
 	if err := dbClient.PublishValues(ctx, roundID, a.workerID, levelUpdates); err != nil {
 		return fmt.Errorf("failed to publish level updates: %w", err)
 	}
+
+	log.Printf("[%s] Round %d: Published %d level updates", a.workerID, r, len(levelUpdates))
 
 	// Wait for round completion
 	maxRetries := 100
@@ -321,6 +355,7 @@ func (a *KCoreDecomposition) executeRoundSingle(ctx context.Context, dbClient *c
 		}
 	}
 
+	log.Printf("[%s] Round %d: Completed", a.workerID, r)
 	return nil
 }
 
@@ -329,19 +364,25 @@ func (a *KCoreDecomposition) Execute(ctx context.Context, dbClient *client.Clien
 	startTime := time.Now()
 
 	// Round 0: Initial exchange - determine number of rounds
+	log.Printf("[%s] Starting Round 0: Initial exchange", a.workerID)
 	if err := a.executeRound0(ctx, dbClient); err != nil {
 		return nil, fmt.Errorf("round 0 (initial exchange) failed: %w", err)
 	}
+	log.Printf("[%s] Round 0 completed: maxPublicRoundThreshold=%d, number_of_rounds=%d",
+		a.workerID, a.maxPublicRoundThreshold, a.number_of_rounds)
 
 	// Execute algorithm rounds using single get-then-set per round
 	// Round r reads levels from round r-1 (or 0s for r=0) and writes updated levels to round r
+	// Algorithm: Each round reads last value, processes nodes, and posts updates (simple get and set)
 	algorithmRounds := min(a.number_of_rounds-2, a.maxPublicRoundThreshold)
+	log.Printf("[%s] Starting algorithm rounds: %d rounds to execute", a.workerID, algorithmRounds)
 
 	for round := 0; round < algorithmRounds; round++ {
 		if err := a.executeRoundSingle(ctx, dbClient, round); err != nil {
 			return nil, fmt.Errorf("round %d (single update) failed: %w", round, err)
 		}
 	}
+	log.Printf("[%s] Completed %d algorithm rounds", a.workerID, algorithmRounds)
 
 	// Compute final core numbers
 	if err := a.computeCoreNumbers(ctx, dbClient, algorithmRounds); err != nil {
@@ -377,6 +418,8 @@ func (a *KCoreDecomposition) Execute(ctx context.Context, dbClient *client.Clien
 func (a *KCoreDecomposition) executeRound0(ctx context.Context, dbClient *client.Client) error {
 	roundID := uint64(0)
 
+	log.Printf("[%s] Round 0: Starting initial exchange", a.workerID)
+
 	// Start round 0
 	if err := dbClient.StartRound(ctx, roundID, int32(a.numWorkers)); err != nil {
 		return fmt.Errorf("failed to start round 0: %w", err)
@@ -385,6 +428,8 @@ func (a *KCoreDecomposition) executeRound0(ctx context.Context, dbClient *client
 	// Compute noised degrees and round thresholds for assigned vertices
 	degreePairs := make(map[string][]byte)
 	maxWorkerThreshold := 0
+
+	log.Printf("[%s] Round 0: Processing %d vertices", a.workerID, len(a.myVertices))
 
 	for _, vertexID := range a.myVertices {
 		vertex := a.vertices[vertexID]
@@ -412,6 +457,9 @@ func (a *KCoreDecomposition) executeRound0(ctx context.Context, dbClient *client
 		threshold := math.Ceil(log_a_to_base_b(int(noised_degree), 2.0)) * a.levels_per_group
 		vertex.round_threshold = int(threshold) + 1
 
+		log.Printf("[%s] Round 0: Vertex %d: degree=%d, noised_degree=%d, round_threshold=%d",
+			a.workerID, vertexID, degree, noised_degree, vertex.round_threshold)
+
 		// Store degree in OKVS
 		degreeKey := fmt.Sprintf("degree-%d", vertexID)
 		degreeValue := float64ToBytes(float64(noised_degree))
@@ -422,6 +470,8 @@ func (a *KCoreDecomposition) executeRound0(ctx context.Context, dbClient *client
 			maxWorkerThreshold = vertex.round_threshold
 		}
 	}
+
+	log.Printf("[%s] Round 0: Max worker threshold: %d", a.workerID, maxWorkerThreshold)
 
 	// Publish degrees → OKVS
 	if err := dbClient.PublishValues(ctx, roundID, a.workerID, degreePairs); err != nil {
@@ -482,23 +532,33 @@ func (a *KCoreDecomposition) executeRound0(ctx context.Context, dbClient *client
 			if threshold > maxPublicRoundThreshold {
 				maxPublicRoundThreshold = threshold
 			}
+			log.Printf("[%s] Round 0: Worker %s threshold: %d", a.workerID, workerID, threshold)
+		} else {
+			log.Printf("[%s] Round 0: Could not read threshold from worker %s: %v", a.workerID, workerID, err)
 		}
 	}
 
 	a.maxPublicRoundThreshold = maxPublicRoundThreshold
 	// Compute round count (same formula as original: min(number_of_rounds-2, maxPublicRoundThreshold))
+	original_number_of_rounds := a.number_of_rounds
 	a.number_of_rounds = min(a.number_of_rounds-2, a.maxPublicRoundThreshold)
+
+	log.Printf("[%s] Round 0: Global max threshold: %d, original number_of_rounds: %d, final number_of_rounds: %d",
+		a.workerID, maxPublicRoundThreshold, original_number_of_rounds, a.number_of_rounds)
 
 	// Initialize levels in OKVS (all start at 0.0)
 	// This happens implicitly when levels are first queried/updated in round 1
 	// We don't need to publish them now since all vertices start at level 0
 
+	log.Printf("[%s] Round 0: Initial exchange completed", a.workerID)
 	return nil
 }
 
 // executeRoundPublishIncreases executes the publish phase for level increases
+// DEPRECATED: This function is no longer used. The algorithm now uses executeRoundSingle
+// which performs a simple get-then-set in each round. Kept for reference only.
 func (a *KCoreDecomposition) executeRoundPublishIncreases(ctx context.Context, dbClient *client.Client, algorithmRound int) error {
-	// Deprecated in single-round mode
+	// Deprecated in single-round mode - use executeRoundSingle instead
 	// Keep for compatibility if needed by callers (unused now)
 	roundID := uint64(algorithmRound)
 
@@ -631,8 +691,10 @@ func (a *KCoreDecomposition) executeRoundPublishIncreases(ctx context.Context, d
 }
 
 // executeRoundUpdateLevels executes the update phase for level updates
+// DEPRECATED: This function is no longer used. The algorithm now uses executeRoundSingle
+// which performs a simple get-then-set in each round. Kept for reference only.
 func (a *KCoreDecomposition) executeRoundUpdateLevels(ctx context.Context, dbClient *client.Client, algorithmRound int) error {
-	// Deprecated in single-round mode
+	// Deprecated in single-round mode - use executeRoundSingle instead
 	// Keep for compatibility if needed by callers (unused now)
 	roundID := uint64(algorithmRound)
 
@@ -722,6 +784,8 @@ func (a *KCoreDecomposition) executeRoundUpdateLevels(ctx context.Context, dbCli
 
 // computeCoreNumbers computes final core numbers from levels (same formula as original estimateCoreNumbers)
 func (a *KCoreDecomposition) computeCoreNumbers(ctx context.Context, dbClient *client.Client, algorithmRounds int) error {
+	log.Printf("[%s] Computing final core numbers from %d algorithm rounds", a.workerID, algorithmRounds)
+
 	// Query final levels from OKVS
 	// Last round where levels were updated is the last executed round (algorithmRounds-1)
 	var finalRoundID uint64
@@ -731,10 +795,13 @@ func (a *KCoreDecomposition) computeCoreNumbers(ctx context.Context, dbClient *c
 		finalRoundID = uint64(algorithmRounds - 1)
 	}
 
+	log.Printf("[%s] Querying final levels from round %d", a.workerID, finalRoundID)
+
 	// Same constants as original estimateCoreNumbers
 	two_plus_lambda := 2.0 + a.lambda
 	one_plus_psi := 1.0 + a.psi
 
+	computedCount := 0
 	for _, vertexID := range a.myVertices {
 		levelKey := fmt.Sprintf("level-%d", vertexID)
 		levelBytes, err := dbClient.GetValue(ctx, finalRoundID, levelKey)
@@ -745,6 +812,7 @@ func (a *KCoreDecomposition) computeCoreNumbers(ctx context.Context, dbClient *c
 			node_level = bytesToFloat64(levelBytes)
 		} else {
 			node_level = 0.0 // Default to 0 if not found
+			log.Printf("[%s] Vertex %d: Could not read final level, defaulting to 0.0", a.workerID, vertexID)
 		}
 
 		// Compute core number (same formula as original estimateCoreNumbers)
@@ -755,11 +823,15 @@ func (a *KCoreDecomposition) computeCoreNumbers(ctx context.Context, dbClient *c
 		power := math.Max(math.Floor(frac_numerator/a.levels_per_group)-1.0, 0.0)
 		core_number := two_plus_lambda * math.Pow(one_plus_psi, power)
 
+		log.Printf("[%s] Vertex %d: final level=%.2f, core_number=%.4f", a.workerID, vertexID, node_level, core_number)
+
 		a.mu.Lock()
 		a.results[vertexID] = core_number
 		a.mu.Unlock()
+		computedCount++
 	}
 
+	log.Printf("[%s] Computed core numbers for %d vertices", a.workerID, computedCount)
 	return nil
 }
 

@@ -34,7 +34,7 @@ echo "Press Ctrl+C to stop"
 echo ""
 
 # Capture traffic
-tcpdump -i any -w "$OUTPUT" port $PORT -v
+sudo tcpdump -i any -w "$OUTPUT" port $PORT -v
 
 echo ""
 echo "Capture complete! Output saved to: $OUTPUT"

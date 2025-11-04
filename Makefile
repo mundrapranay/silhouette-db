@@ -6,6 +6,7 @@
 	bench bench-store bench-server bench-pir bench-okvs \
 	test-no-cgo fmt test-runtime test-cluster test-multi-worker test-load \
 	test-degree-collector test-kcore-decomposition test-e2e-backends \
+	test-fault-tolerance \
 	apply-patches submodule-init
 
 # Go parameters
@@ -234,6 +235,16 @@ test-kcore-decomposition:
 test-e2e-backends:
 	@echo "Running end-to-end tests with both backends..."
 	@./scripts/test-e2e-backends.sh
+
+# Run fault tolerance tests (Raft consensus failure scenarios)
+test-fault-tolerance:
+	@echo "Running fault tolerance tests..."
+	@echo "=========================================="
+	@echo "Testing Raft consensus fault tolerance..."
+	@echo "=========================================="
+	$(GOTEST) -v ./internal/store/... -run "TestLeaderFailure|TestMultiple|TestConcurrent|TestQuorum|TestData|TestWrite|TestRapid|TestLeaderElection"
+	@echo ""
+	@echo "✅ Fault tolerance tests complete!"
 
 # Submodule and patch management
 submodule-init:
