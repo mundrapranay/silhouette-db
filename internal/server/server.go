@@ -201,6 +201,7 @@ func (s *Server) PublishValues(ctx context.Context, req *apiv1.PublishValuesRequ
 			}
 
 			// Create KVS decoder for this round
+			// Note: KVS encoder can handle empty maps (returns empty JSON object)
 			storageDecoder, err = crypto.NewKVSDecoder(storageBlob)
 			if err != nil {
 				return nil, status.Errorf(codes.Internal, "failed to create KVS decoder: %v", err)

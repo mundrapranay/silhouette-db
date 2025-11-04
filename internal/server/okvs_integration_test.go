@@ -14,6 +14,7 @@ import (
 	"github.com/mundrapranay/silhouette-db/internal/crypto"
 	"github.com/mundrapranay/silhouette-db/internal/store"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 )
 
 // setupTestServerWithRBOKVS sets up a complete server with gRPC endpoint
@@ -220,8 +221,7 @@ func TestRBOKVSIntegration_FullRound(t *testing.T) {
 	}
 }
 
-// TestRBOKVSIntegration_TooFewPairs tests that the server skips OKVS encoding with fewer than 100 pairs
-// and uses direct PIR instead
+// TestRBOKVSIntegration_TooFewPairs tests that OKVS backend rejects fewer than 100 pairs
 func TestRBOKVSIntegration_TooFewPairs(t *testing.T) {
 	grpcSrv, server, store, _ := setupTestServerWithRBOKVS(t)
 	defer grpcSrv.Stop()
@@ -254,33 +254,28 @@ func TestRBOKVSIntegration_TooFewPairs(t *testing.T) {
 		}
 	}
 
-	// Publish values - should succeed, but skip OKVS encoding and use direct PIR
+	// Publish values - should fail with OKVS backend (< 100 pairs)
 	_, err = server.PublishValues(ctx, &apiv1.PublishValuesRequest{
 		RoundId:  roundID,
 		WorkerId: "worker1",
 		Pairs:    pairs,
 	})
 
-	// This should succeed - server skips OKVS and uses direct PIR for < 100 pairs
-	if err != nil {
-		t.Fatalf("PublishValues should succeed with %d pairs (OKVS skipped, direct PIR used): %v", len(pairs), err)
+	// This should fail - OKVS requires at least 100 pairs
+	if err == nil {
+		t.Fatal("PublishValues should fail with OKVS backend when < 100 pairs")
 	}
 
-	time.Sleep(500 * time.Millisecond)
-
-	// Verify round data was stored (as raw pairs, not OKVS blob)
-	roundKey := "round_200_results"
-	storageData, exists := store.Get(roundKey)
-	if !exists {
-		t.Fatal("Round data should be stored after all workers publish")
+	// Verify error is InvalidArgument
+	s, ok := status.FromError(err)
+	if !ok {
+		t.Fatalf("Error should be a gRPC status error: %v", err)
 	}
-	if len(storageData) == 0 {
-		t.Fatal("Round data should not be empty")
+	if s.Code().String() != "InvalidArgument" {
+		t.Fatalf("Expected InvalidArgument error, got: %s", s.Code().String())
 	}
 
-	// Verify it's raw pairs format (not OKVS format)
-	// OKVS format has a specific structure, raw pairs are simple serialization
-	t.Logf("✅ Correctly handled %d pairs (below OKVS minimum of 100): used direct PIR, stored %d bytes", len(pairs), len(storageData))
+	t.Logf("✅ OKVS backend correctly rejects < 100 pairs: %v", err)
 }
 
 // TestRBOKVSIntegration_InvalidValueSize tests that encoding fails with non-8-byte values

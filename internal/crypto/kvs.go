@@ -24,6 +24,11 @@ func (e *KVSEncoder) Encode(pairs map[string][]byte) ([]byte, error) {
 		return nil, fmt.Errorf("pairs map cannot be nil")
 	}
 
+	// Handle empty map - return empty JSON object
+	if len(pairs) == 0 {
+		return json.Marshal(map[string]string{})
+	}
+
 	// Convert []byte values to base64 strings for JSON encoding
 	data := make(map[string]string, len(pairs))
 	for k, v := range pairs {
@@ -49,7 +54,11 @@ type KVSDecoder struct {
 // NewKVSDecoder creates a new KVS decoder from an encoded blob.
 func NewKVSDecoder(blob []byte) (*KVSDecoder, error) {
 	if len(blob) == 0 {
-		return nil, fmt.Errorf("blob cannot be empty")
+		// Empty blob means no pairs (empty round)
+		// Return decoder with empty pairs map
+		return &KVSDecoder{
+			pairs: make(map[string][]byte),
+		}, nil
 	}
 
 	// Deserialize JSON

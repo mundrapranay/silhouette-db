@@ -213,9 +213,17 @@ func TestKVSDecoder_Decode_NonExistentKey(t *testing.T) {
 }
 
 func TestKVSDecoder_Decode_EmptyBlob(t *testing.T) {
-	_, err := NewKVSDecoder([]byte{})
-	if err == nil {
-		t.Fatal("Expected error for empty blob")
+	// Empty blob is now allowed (for empty rounds)
+	decoder, err := NewKVSDecoder([]byte{})
+	if err != nil {
+		t.Errorf("Expected no error for empty blob (for empty rounds): %v", err)
+	}
+	if decoder == nil {
+		t.Fatal("Expected decoder for empty blob")
+	}
+	// Verify decoder has empty pairs map
+	if len(decoder.pairs) != 0 {
+		t.Errorf("Expected empty pairs map, got %d pairs", len(decoder.pairs))
 	}
 }
 
