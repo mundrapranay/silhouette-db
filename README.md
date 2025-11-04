@@ -5,7 +5,7 @@
 ![Go Version](https://img.shields.io/badge/go-1.24+-00ADD8?style=for-the-badge&logo=go)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg?style=for-the-badge&logo=github)
 ![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg?style=for-the-badge)
-![Tests](https://img.shields.io/badge/tests-failing-red.svg?style=for-the-badge)
+![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg?style=for-the-badge)
 ![Coverage](https://img.shields.io/badge/coverage-TBD-lightgrey.svg?style=for-the-badge)
 
 **A fault-tolerant, distributed, and oblivious coordination layer for testing Local Edge Differentially Private (LEDP) algorithms.**
