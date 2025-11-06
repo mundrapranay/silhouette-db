@@ -72,15 +72,23 @@ This document provides a comprehensive, self-sufficient guide to the `silhouette
 │  │ Manager  │        │     Layer       │                                │
 │  │          │        │                 │                                │
 │  │ Tracks   │        │ ┌─────────────┐ │                                │
-│  │ worker   │        │ │ RB-OKVS     │ │                                │
-│  │ state    │        │ │ Encoder/    │ │                                │
-│  │ per      │        │ │ Decoder     │ │                                │
-│  │ round    │        │ └─────────────┘ │                                │
-│  └────┬─────┘        │                 │                                │
+│  │ worker   │        │ │ Storage     │ │                                │
+│  │ state    │        │ │ Backends    │ │                                │
+│  │ per      │        │ │             │ │                                │
+│  │ round    │        │ │ • OKVS      │ │                                │
+│  └────┬─────┘        │ │   (Oblivious│ │                                │
+│       │              │ │    Storage) │ │                                │
+│       │              │ │ • KVS       │ │                                │
+│       │              │ │   (Simple   │ │                                │
+│       │              │ │    Storage) │ │                                │
+│       │              │ └─────────────┘ │                                │
+│       │              │                 │                                │
 │       │              │ ┌─────────────┐ │                                │ 
 │       │              │ │ FrodoPIR    │ │                                │
 │       │              │ │ Server/     │ │                                │
 │       │              │ │ Client      │ │                                │
+│       │              │ │ (Private    │ │                                │
+│       │              │ │  Queries)   │ │                                │
 │       │              │ └─────────────┘ │                                │
 │       └──────────────┴─────────┬───────┘                                │
 │                                │                                        │
@@ -200,7 +208,14 @@ The cryptographic layer provides storage backends (OKVS or KVS) and private quer
 - **OKVS** (`internal/crypto/okvs_impl.go`): Oblivious key-value store (requires 100+ pairs)
 - **KVS** (`internal/crypto/kvs.go`): Simple key-value store (works with any number of pairs)
 
-**Selection**: Server chooses backend based on `--storage-backend` flag (default: OKVS).
+**Selection**: Server chooses backend based on `--storage-backend` flag:
+- `--storage-backend=okvs`: Use OKVS backend (default)
+- `--storage-backend=kvs`: Use KVS backend
+- Default: OKVS if not specified
+
+**Backend Requirements**:
+- **OKVS**: Requires `len(allPairs) >= 100` (enforced at publish time)
+- **KVS**: Works with any number of pairs (no minimum)
 
 #### 2.2 OKVS Implementation (`internal/crypto/okvs_impl.go`)
 
@@ -319,8 +334,9 @@ The server layer orchestrates Raft, OKVS, and PIR components.
 
 ```go
 type Server struct {
-    store       *store.Store
-    okvsEncoder crypto.OKVSEncoder
+    store          *store.Store
+    okvsEncoder    crypto.OKVSEncoder  // OKVSEncoder interface (OKVS or KVS)
+    storageBackend string              // "okvs" or "kvs"
 
     // Round management
     roundsMu        sync.RWMutex
@@ -332,9 +348,9 @@ type Server struct {
     roundBaseParams map[uint64][]byte
     roundKeyMapping map[uint64]map[string]int
 
-    // OKVS storage per round
-    okvsBlobs    map[uint64][]byte
-    okvsDecoders map[uint64]*crypto.RBOKVSDecoder
+    // Storage per round (OKVS or KVS)
+    storageBlobs    map[uint64][]byte             // Encoded blobs (OKVS or KVS)
+    storageDecoders map[uint64]crypto.OKVSDecoder // Decoders (interface type)
 }
 ```
 
@@ -376,19 +392,30 @@ type roundState struct {
      - Skips PIR server creation
      - Returns success
   
-  **OKVS Encoding Decision**:
-  7. Checks: `len(allPairs) >= 100?`
+  **Storage Backend Selection**:
+  7. Uses backend specified by `--storage-backend` flag (default: "okvs")
+     - If `storageBackend == "okvs"`:
+       - Requires `len(allPairs) >= 100` (RB-OKVS requirement)
+       - If <100 pairs, returns error: "OKVS requires at least 100 pairs"
+     - If `storageBackend == "kvs"`:
+       - Works with any number of pairs (no minimum)
   
-  **If OKVS (≥100 pairs)**:
-  8. Encodes via `okvsEncoder.Encode(allPairs)` → `okvsBlob`
-  9. Creates OKVS decoder: `NewRBOKVSDecoder(okvsBlob)`
-  10. Decodes all values from OKVS to create PIR database:
+  **Storage Encoding**:
+  8. Encodes via `okvsEncoder.Encode(allPairs)` → `storageBlob`
+     - If OKVS backend: Uses `RBOKVSEncoder` (Rust FFI)
+     - If KVS backend: Uses `KVSEncoder` (pure Go, JSON serialization)
+  
+  **Storage Decoder Creation**:
+  9. Creates decoder based on backend:
+     - If OKVS: `storageDecoder = NewRBOKVSDecoder(storageBlob)`
+     - If KVS: `storageDecoder = NewKVSDecoder(storageBlob)`
+  
+  **PIR Database Preparation**:
+  10. Decodes all values from storage to create PIR database:
       - For each key in sorted order:
-        - `decodedValue = okvsDecoder.Decode(okvsBlob, key)`
-      - Creates `pirPairs` map with OKVS-decoded values
-  
-  **If No OKVS (<100 pairs)**:
-  8. Uses raw pairs directly: `pirPairs = allPairs`
+        - `decodedValue = storageDecoder.Decode(storageBlob, key)`
+      - Creates `pirPairs` map with decoded values
+      - Note: Values are same as original, but decoded from storage backend
   
   **PIR Server Creation**:
   11. Calculates `elemSize` (max value size, rounded to power of 2)
@@ -401,20 +428,20 @@ type roundState struct {
       - `pirServers[roundID]` = PIR server
       - `roundBaseParams[roundID]` = BaseParams
       - `roundKeyMapping[roundID]` = keyToIndex
-      - `okvsBlobs[roundID]` = OKVS blob (if used)
-      - `okvsDecoders[roundID]` = OKVS decoder (if used)
+      - `storageBlobs[roundID]` = storage blob (OKVS or KVS)
+      - `storageDecoders[roundID]` = storage decoder (interface type)
   
   **Persistent Storage**:
-  16. Prepares storage data:
-      - If OKVS: `storageData = okvsBlob`
-      - If no OKVS: `storageData = serializedPairs`
-  17. Stores in Raft: `store.Set("round_{roundID}_results", storageData)`
-  18. Raft replicates to all nodes
-  19. All nodes' FSMs store the data
+  16. Stores in Raft: `store.Set("round_{roundID}_results", storageBlob)`
+     - Storage blob format depends on backend:
+       - OKVS: RB-OKVS encoded blob
+       - KVS: JSON-serialized map with base64-encoded values
+  17. Raft replicates to all nodes
+  18. All nodes' FSMs store the data
   
   **Completion**:
-  20. Marks `roundState.complete = true`
-  21. Returns success to all workers
+  19. Marks `roundState.complete = true`
+  20. Returns success to all workers
 
 **GetValue**:
 - Only leader processes queries
@@ -679,44 +706,54 @@ allPairs
         k150: 149
     }
 
-Step 3: OKVS Encoding Decision
-───────────────────────────────
-len(allPairs) = 150
+Step 3: Storage Backend Selection
+───────────────────────────────────
+Backend determined by --storage-backend flag (default: "okvs")
             ↓
-    Check: 150 >= 100? YES → Use OKVS
-            ↓
-    (If < 100, skip to Step 6: Direct PIR)
+    If storageBackend == "okvs":
+        Check: len(allPairs) >= 100?
+        - YES → Use OKVS encoding
+        - NO → Error: "OKVS requires at least 100 pairs"
+    If storageBackend == "kvs":
+        Use KVS encoding (any number of pairs)
 
-Step 4: OKVS Encoding
-──────────────────────
+Step 4: Storage Encoding
+─────────────────────────
 allPairs (map[string][]byte)
-    Values: All must be 8 bytes (float64, little-endian)
             ↓
-    RBOKVSEncoder.Encode(allPairs)
-            ↓
-    Process:
-    1. Hash keys to 8-byte OkvsKey (BLAKE2b512)
-    2. Convert values to float64
-    3. Encode via RB-OKVS algorithm
-            ↓
-    OKVS Blob (opaque byte slice)
-            ↓
-    Size: ~1.1-1.2x original size
-    Properties: Oblivious (hides which keys)
+    If OKVS backend:
+        Values: All must be 8 bytes (float64, little-endian)
+        RBOKVSEncoder.Encode(allPairs)
+        Process:
+        1. Hash keys to 8-byte OkvsKey (BLAKE2b512)
+        2. Convert values to float64
+        3. Encode via RB-OKVS algorithm
+        → OKVS Blob (opaque byte slice)
+        Size: ~1.1-1.2x original size
+        Properties: Oblivious (hides which keys)
+    
+    If KVS backend:
+        KVSEncoder.Encode(allPairs)
+        Process:
+        1. Serialize as JSON map
+        2. Base64-encode values
+        → KVS Blob (JSON-serialized map)
+        Properties: Fast, but reveals keys
 
-Step 5: OKVS Decoding for PIR Database
-───────────────────────────────────────
-OKVS Blob
+Step 5: Storage Decoding for PIR Database
+───────────────────────────────────────────
+Storage Blob (OKVS or KVS)
             ↓
-    RBOKVSDecoder = NewRBOKVSDecoder(okvsBlob)
+    If OKVS: storageDecoder = NewRBOKVSDecoder(storageBlob)
+    If KVS: storageDecoder = NewKVSDecoder(storageBlob)
             ↓
     For each key in sorted order:
-        decodedValue = decoder.Decode(okvsBlob, key)
+        decodedValue = storageDecoder.Decode(storageBlob, key)
             ↓
     pirPairs = {k1:v1_decoded, k2:v2_decoded, ..., k150:v150_decoded}
             ↓
-    Note: Values are same as original, but decoded from OKVS
-    This ensures PIR operates on obliviously-encoded data
+    Note: Values are same as original, but decoded from storage backend
+    This ensures PIR operates on storage-encoded data
 
 Step 6: PIR Server Creation
 ───────────────────────────
@@ -752,14 +789,17 @@ Server stores (in-memory, per round):
     - pirServers[roundID] = FrodoPIR server shard
     - roundBaseParams[roundID] = BaseParams (bytes)
     - roundKeyMapping[roundID] = keyToIndex map
-    - okvsBlobs[roundID] = OKVS blob
-    - okvsDecoders[roundID] = OKVS decoder
+    - storageBlobs[roundID] = Storage blob (OKVS or KVS)
+    - storageDecoders[roundID] = Storage decoder (interface type)
 
 Step 8: Persistent Storage
 ───────────────────────────
-OKVS Blob
+Storage Blob (OKVS or KVS)
             ↓
-    Store.Set("round_{id}_results", okvsBlob)
+    Store.Set("round_{id}_results", storageBlob)
+    Format depends on backend:
+    - OKVS: RB-OKVS encoded blob
+    - KVS: JSON-serialized map with base64-encoded values
             ↓
     Raft proposes command:
     {
@@ -859,17 +899,36 @@ When all workers publish empty pairs:
 5. Stores empty data in Raft
 6. Marks round as complete (synchronization-only round)
 
-### Direct PIR Fallback (<100 pairs)
+### KVS Backend Flow (<100 pairs or explicit selection)
 
-When fewer than 100 pairs are published:
-1. OKVS encoding is skipped (RB-OKVS requires ≥100 pairs)
-2. Raw pairs used directly for PIR database
-3. PIR server created from raw pairs
-4. Raw pairs serialized and stored in Raft (not OKVS blob)
+When KVS backend is selected (via `--storage-backend=kvs` or <100 pairs with OKVS):
+1. KVS encoding used (JSON serialization with base64-encoded values)
+2. Decoded pairs used for PIR database
+3. PIR server created from decoded pairs
+4. KVS blob (JSON-serialized) stored in Raft
 
 ## Cryptographic Primitives
 
 ### Storage Backends
+
+`silhouette-db` supports two storage backends for encoding key-value pairs:
+
+1. **OKVS (Oblivious Key-Value Store)**: Provides oblivious storage properties
+2. **KVS (Simple Key-Value Store)**: Fast, simple storage without oblivious properties
+
+Both backends work seamlessly with PIR (Private Information Retrieval) for query privacy, but they differ in their storage encoding and privacy guarantees.
+
+#### Storage Backend Comparison
+
+| Feature | OKVS | KVS |
+|---------|------|-----|
+| **Oblivious Storage** | ✅ Yes | ❌ No |
+| **Minimum Pairs** | 100+ pairs required | Any number |
+| **Encoding Overhead** | ~10-20% | None (just JSON serialization) |
+| **Performance** | Slower (encoding/decoding) | Faster (direct map lookup) |
+| **Use Case** | Privacy-sensitive applications | Testing, development, non-private algorithms |
+| **CGO Required** | ✅ Yes (Rust FFI) | ❌ No |
+| **Storage Format** | RB-OKVS encoded blob | JSON-serialized map |
 
 #### OKVS (Oblivious Key-Value Store)
 
@@ -887,6 +946,7 @@ When fewer than 100 pairs are published:
 - **Obliviousness**: The blob reveals nothing about stored keys
 - **Decodability**: Any key can be decoded (with high probability)
 - **Compactness**: Size is ~1.1-1.2x the original data size
+- **Privacy**: Hides which keys are stored in the database
 
 **Implementation Details**:
 - Uses Rust FFI library (`rb-okvs`)
@@ -896,7 +956,11 @@ When fewer than 100 pairs are published:
 - Encoding rate: ~10-20% overhead
 - CGO required (Rust FFI integration)
 
-**When to Use**: Privacy-sensitive applications with 100+ pairs per round.
+**When to Use**:
+- ✅ Privacy-sensitive applications requiring oblivious storage
+- ✅ Production deployments where storage privacy is important
+- ✅ Algorithms with 100+ key-value pairs per round
+- ✅ When you need to hide which keys are stored
 
 #### KVS (Simple Key-Value Store)
 
@@ -921,9 +985,37 @@ When fewer than 100 pairs are published:
 - No minimum pair requirement
 - No encoding overhead
 
-**When to Use**: Testing, development, non-privacy-sensitive applications, or when you have <100 pairs.
+**When to Use**:
+- ✅ Testing and development
+- ✅ Algorithms with fewer than 100 pairs
+- ✅ Non-privacy-sensitive applications
+- ✅ When performance is critical
+- ✅ When CGO is not available or desired
+- ✅ Exact algorithms (non-private)
 
-See [Storage Backends Guide](./storage-backends.md) for detailed comparison and usage.
+#### Choosing the Right Backend
+
+**Decision Tree**:
+```
+Do you need oblivious storage?
+├─ Yes → Use OKVS (if you have 100+ pairs)
+│         └─ If <100 pairs → Use KVS (OKVS not available)
+└─ No → Use KVS (faster, simpler)
+```
+
+**Recommendations**:
+1. **Privacy-sensitive production**: Use OKVS
+2. **Testing/development**: Use KVS
+3. **<100 pairs**: Use KVS (OKVS requires 100+)
+4. **Performance-critical**: Use KVS
+5. **No CGO available**: Use KVS
+
+**Server Configuration**:
+- Command-line flag: `--storage-backend=okvs` or `--storage-backend=kvs`
+- Default: OKVS (if not specified)
+- Environment variable: `STORAGE_BACKEND=kvs` (for test scripts)
+
+See [Storage Backends Guide](./storage-backends.md) for detailed comparison, usage examples, and troubleshooting.
 
 ### PIR (Private Information Retrieval)
 
@@ -951,12 +1043,12 @@ See [Storage Backends Guide](./storage-backends.md) for detailed comparison and 
 
 ### Combined Privacy
 
-When OKVS + PIR are used together:
-1. **Storage Privacy**: OKVS hides which keys are stored
-2. **Query Privacy**: PIR hides which key is queried
+**OKVS + PIR**:
+1. **Storage Privacy**: ✅ OKVS hides which keys are stored
+2. **Query Privacy**: ✅ PIR hides which key is queried
 3. **Complete Obliviousness**: Neither storage patterns nor query patterns are revealed
 
-When KVS + PIR are used together:
+**KVS + PIR**:
 1. **Storage Privacy**: ❌ Not provided (storage format reveals keys)
 2. **Query Privacy**: ✅ PIR hides which key is queried
 3. **Partial Privacy**: Only query patterns are hidden, not storage patterns
@@ -1132,14 +1224,28 @@ err := client.InitializePIRClient(ctx, roundID)
 
 ### Single-Node Deployment
 
+**With OKVS Backend (default)**:
 ```bash
-# Start server
+# Start server with OKVS backend
 ./bin/silhouette-server \
     -node-id=node1 \
     -listen-addr=127.0.0.1:8080 \
     -grpc-addr=127.0.0.1:9090 \
     -data-dir=./data/node1 \
-    -bootstrap
+    -bootstrap \
+    -storage-backend=okvs
+```
+
+**With KVS Backend**:
+```bash
+# Start server with KVS backend
+./bin/silhouette-server \
+    -node-id=node1 \
+    -listen-addr=127.0.0.1:8080 \
+    -grpc-addr=127.0.0.1:9090 \
+    -data-dir=./data/node1 \
+    -bootstrap \
+    -storage-backend=kvs
 ```
 
 ### Multi-Node Cluster Deployment
@@ -1151,7 +1257,8 @@ err := client.InitializePIRClient(ctx, roundID)
     -listen-addr=127.0.0.1:8080 \
     -grpc-addr=127.0.0.1:9090 \
     -data-dir=./data/node1 \
-    -bootstrap
+    -bootstrap \
+    -storage-backend=okvs  # or kvs
 ```
 
 **Additional Nodes**:
@@ -1161,8 +1268,11 @@ err := client.InitializePIRClient(ctx, roundID)
     -listen-addr=127.0.0.1:8081 \
     -grpc-addr=127.0.0.1:9091 \
     -data-dir=./data/node2 \
-    -join=127.0.0.1:8080
+    -join=127.0.0.1:8080 \
+    -storage-backend=okvs  # Must match bootstrap node
 ```
+
+**Note**: All nodes in a cluster should use the same storage backend for consistency.
 
 ### Running Algorithms
 
