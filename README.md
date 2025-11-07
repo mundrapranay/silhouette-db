@@ -46,25 +46,80 @@ The system consists of:
 ### High-Level Architecture
 
 ```
-┌─────────────────────┐
-│  LEDP Workers       │  Execute graph algorithms
-│  (Clients)          │
-└──────────┬──────────┘
-           │ gRPC
-           ▼
-┌─────────────────────┐
-│  Coordination Layer │  Distributed, oblivious key-value store
-│  (silhouette-db)    │
-│  - Raft Consensus   │
-│  - Storage Backend  │  (OKVS or KVS)
-│  - PIR Queries      │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  Raft Cluster       │  Replicated state machine
-│  (Node 1...N)       │
-└─────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         LEDP Workers (Clients)                          │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐                 │
+│  │ Worker-0 │  │ Worker-1 │  │ Worker-2 │  │ Worker-N │                 │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘                 │
+│       │             │             │             │                       │
+│       └─────────────┴─────────────┴─────────────┘                       │
+│                          │                                              │
+│                    gRPC API (CoordinationService)                       │
+└──────────────────────────┼──────────────────────────────────────────────┘
+                           │
+┌──────────────────────────┼──────────────────────────────────────────────┐
+│                  silhouette-db Coordination Layer                       │
+│                                                                         │
+│  ┌────────────────────────────────────────────────────────────────┐     │
+│  │                      gRPC Server Layer                         │     │
+│  │  - StartRound: Initialize synchronous rounds                   │     │
+│  │  - PublishValues: Aggregate worker contributions               │     │
+│  │  - GetValue: Process PIR queries                               │     │
+│  │  - GetBaseParams: Distribute PIR parameters                    │     │
+│  │  - GetKeyMapping: Provide key-to-index mappings                │     │
+│  └────────────────┬─────────────────────────────────────────────--┘     │
+│                   │                                                     │
+│       ┌───────────┴───────────┐                                         │
+│       │                       │                                         │
+│  ┌────▼─────┐        ┌────────▼────────┐                                │
+│  │ Round    │        │  Cryptographic  │                                │
+│  │ Manager  │        │     Layer       │                                │
+│  │          │        │                 │                                │
+│  │ Tracks   │        │ ┌─────────────┐ │                                │
+│  │ worker   │        │ │ Storage     │ │                                │
+│  │ state    │        │ │ Backends    │ │                                │
+│  │ per      │        │ │             │ │                                │
+│  │ round    │        │ │ • OKVS      │ │                                │
+│  └────┬─────┘        │ │   (Oblivious│ │                                │
+│       │              │ │    Storage) │ │                                │
+│       │              │ │ • KVS       │ │                                │
+│       │              │ │   (Simple   │ │                                │
+│       │              │ │    Storage) │ │                                │
+│       │              │ └─────────────┘ │                                │
+│       │              │                 │                                │
+│       │              │ ┌─────────────┐ │                                │ 
+│       │              │ │ FrodoPIR    │ │                                │
+│       │              │ │ Server/     │ │                                │
+│       │              │ │ Client      │ │                                │
+│       │              │ │ (Private    │ │                                │
+│       │              │ │  Queries)   │ │                                │
+│       │              │ └─────────────┘ │                                │
+│       └──────────────┴─────────┬───────┘                                │
+│                                │                                        │
+│                       ┌────────▼────────┐                               │
+│                       │   Raft Layer    │                               │
+│                       │                 │                               │
+│                       │ ┌─────────────┐ │                               │
+│                       │ │ FSM         │ │                               │
+│                       │ │ (Key-Value  │ │                               │
+│                       │ │  Store)     │ │                               │
+│                       │ └─────────────┘ │                               │
+│                       │                 │                               │
+│                       │ ┌─────────────┐ │                               │
+│                       │ │ Raft        │ │                               │
+│                       │ │ Consensus   │ │                               │
+│                       │ │ (Log Repli  │ │                               │
+│                       │ │  cation)    │ │                               │
+│                       │ └─────────────┘ │                               │
+│                       └────────┬────────┘                               │
+└───────────────────────────────┼────────────────────────────────────────-┘
+                                │
+                    ┌───────────┴───────────┐
+                    │                       │
+              ┌─────▼─────┐         ┌──────▼─────┐
+              │ Node 1    │         │ Node N     │
+              │ (Leader)  │◄───────►│ (Follower) │
+              └───────────┘         └────────────┘
 ```
 
 ## Project Structure
