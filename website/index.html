@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Silhouette DB | Privacy-Preserving Distributed Systems</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark fixed-top">
+        <div class="container">
+            <a class="navbar-brand d-flex align-items-center" href="#">
+                <span class="brand-icon me-2">
+                    <i class="bi bi-shield-lock-fill"></i>
+                </span>
+                <span class="brand-text">silhouette<span class="text-accent">-db</span></span>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item"><a class="nav-link" href="#features">Features</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#architecture">Architecture</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#technology">Technology</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#usecases">Use Cases</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#performance">Performance</a></li>
+                    <li class="nav-item">
+                        <a class="btn btn-outline-accent ms-lg-3" href="https://github.com/mundrapranay/silhouette-db" target="_blank">
+                            <i class="bi bi-github me-1"></i> GitHub
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="hero" class="hero-section">
+        <div class="hero-bg">
+            <div class="grid-overlay"></div>
+            <div class="gradient-orb orb-1"></div>
+            <div class="gradient-orb orb-2"></div>
+            <div class="gradient-orb orb-3"></div>
+        </div>
+        <div class="container position-relative">
+            <div class="row align-items-center min-vh-100 py-5">
+                <div class="col-lg-7">
+                    <div class="hero-badge animate-fade-in">
+                        <i class="bi bi-lightning-charge-fill me-2"></i>
+                        Post-Quantum Secure • Privacy-Preserving • Distributed
+                    </div>
+                    <h1 class="hero-title animate-fade-in-up">
+                        The Future of
+                        <span class="gradient-text">Oblivious</span>
+                        Coordination
+                    </h1>
+                    <p class="hero-subtitle animate-fade-in-up delay-1">
+                        A fault-tolerant, distributed, and oblivious coordination layer for privacy-preserving algorithms. 
+                        Built for the next generation of secure distributed systems.
+                    </p>
+                    <div class="hero-stats animate-fade-in-up delay-2">
+                        <div class="stat-item">
+                            <span class="stat-value">< 10ms</span>
+                            <span class="stat-label">PIR Query Latency</span>
+                        </div>
+                        <div class="stat-divider"></div>
+                        <div class="stat-item">
+                            <span class="stat-value">100%</span>
+                            <span class="stat-label">Query Privacy</span>
+                        </div>
+                        <div class="stat-divider"></div>
+                        <div class="stat-item">
+                            <span class="stat-value">N-1</span>
+                            <span class="stat-label">Fault Tolerance</span>
+                        </div>
+                    </div>
+                    <div class="hero-ctas animate-fade-in-up delay-3">
+                        <a href="#architecture" class="btn btn-primary btn-lg me-3">
+                            <i class="bi bi-diagram-3 me-2"></i>Explore Architecture
+                        </a>
+                        <a href="https://github.com/mundrapranay/silhouette-db" class="btn btn-outline-light btn-lg" target="_blank">
+                            <i class="bi bi-github me-2"></i>View on GitHub
+                        </a>
+                    </div>
+                </div>
+                <div class="col-lg-5 d-none d-lg-block">
+                    <div class="hero-visual animate-float">
+                        <div class="shield-container">
+                            <div class="shield-ring ring-1"></div>
+                            <div class="shield-ring ring-2"></div>
+                            <div class="shield-ring ring-3"></div>
+                            <div class="shield-core">
+                                <i class="bi bi-shield-lock-fill"></i>
+                            </div>
+                            <div class="data-particle particle-1"></div>
+                            <div class="data-particle particle-2"></div>
+                            <div class="data-particle particle-3"></div>
+                            <div class="data-particle particle-4"></div>
+                            <div class="data-particle particle-5"></div>
+                            <div class="data-particle particle-6"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="scroll-indicator animate-bounce">
+            <i class="bi bi-chevron-double-down"></i>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="features-section">
+        <div class="container">
+            <div class="section-header text-center">
+                <span class="section-tag">Core Capabilities</span>
+                <h2 class="section-title">Built for <span class="gradient-text">Privacy</span> at Scale</h2>
+                <p class="section-subtitle">
+                    Enterprise-grade features designed for privacy-sensitive distributed applications
+                </p>
+            </div>
+            
+            <div class="row g-4 mt-4">
+                <div class="col-md-6 col-lg-4">
+                    <div class="feature-card" data-aos="fade-up">
+                        <div class="feature-icon">
+                            <i class="bi bi-hdd-network-fill"></i>
+                        </div>
+                        <h3 class="feature-title">Distributed Consensus</h3>
+                        <p class="feature-text">
+                            Raft-based consensus ensures system availability even with node failures. 
+                            Automatic leader election and log replication across all nodes.
+                        </p>
+                        <div class="feature-tags">
+                            <span class="tag">Raft</span>
+                            <span class="tag">Fault-Tolerant</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6 col-lg-4">
+                    <div class="feature-card" data-aos="fade-up" data-aos-delay="100">
+                        <div class="feature-icon">
+                            <i class="bi bi-eye-slash-fill"></i>
+                        </div>
+                        <h3 class="feature-title">Oblivious Storage</h3>
+                        <p class="feature-text">
+                            OKVS (Oblivious Key-Value Store) encoding hides which keys are stored. 
+                            Random Band Matrix encoding with 10-20% overhead.
+                        </p>
+                        <div class="feature-tags">
+                            <span class="tag">RB-OKVS</span>
+                            <span class="tag">Privacy</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6 col-lg-4">
+                    <div class="feature-card" data-aos="fade-up" data-aos-delay="200">
+                        <div class="feature-icon">
+                            <i class="bi bi-incognito"></i>
+                        </div>
+                        <h3 class="feature-title">Private Queries (PIR)</h3>
+                        <p class="feature-text">
+                            FrodoPIR enables querying without revealing which key was requested. 
+                            Server learns nothing about client queries.
+                        </p>
+                        <div class="feature-tags">
+                            <span class="tag">FrodoPIR</span>
+                            <span class="tag">LWE</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6 col-lg-4">
+                    <div class="feature-card" data-aos="fade-up" data-aos-delay="300">
+                        <div class="feature-icon">
+                            <i class="bi bi-shield-check"></i>
+                        </div>
+                        <h3 class="feature-title">Post-Quantum Security</h3>
+                        <p class="feature-text">
+                            LWE-based cryptography protects against quantum computer attacks. 
+                            Future-proof security for long-term data protection.
+                        </p>
+                        <div class="feature-tags">
+                            <span class="tag">Quantum-Safe</span>
+                            <span class="tag">LWE</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6 col-lg-4">
+                    <div class="feature-card" data-aos="fade-up" data-aos-delay="400">
+                        <div class="feature-icon">
+                            <i class="bi bi-diagram-3-fill"></i>
+                        </div>
+                        <h3 class="feature-title">Graph Algorithms</h3>
+                        <p class="feature-text">
+                            Round-based synchronous framework for exact and LEDP algorithms. 
+                            Built-in support for k-core decomposition, PageRank, and more.
+                        </p>
+                        <div class="feature-tags">
+                            <span class="tag">LEDP</span>
+                            <span class="tag">Synchronous</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6 col-lg-4">
+                    <div class="feature-card" data-aos="fade-up" data-aos-delay="500">
+                        <div class="feature-icon">
+                            <i class="bi bi-lightning-charge-fill"></i>
+                        </div>
+                        <h3 class="feature-title">High Performance</h3>
+                        <p class="feature-text">
+                            Sub-second PIR query responses for practical database sizes. 
+                            Optimized Rust cryptographic backends for maximum throughput.
+                        </p>
+                        <div class="feature-tags">
+                            <span class="tag">Rust</span>
+                            <span class="tag">gRPC</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Architecture Section -->
+    <section id="architecture" class="architecture-section">
+        <div class="container">
+            <div class="section-header text-center">
+                <span class="section-tag">System Design</span>
+                <h2 class="section-title">Layered <span class="gradient-text">Architecture</span></h2>
+                <p class="section-subtitle">
+                    A robust, modular design enabling oblivious coordination at scale
+                </p>
+            </div>
+            
+            <div class="architecture-container mt-5">
+                <canvas id="architectureCanvas"></canvas>
+                <div class="architecture-overlay">
+                    <!-- Worker Layer -->
+                    <div class="arch-layer workers-layer">
+                        <div class="layer-title">LEDP Workers</div>
+                        <div class="layer-nodes">
+                            <div class="arch-node worker-node" data-node="worker-0">
+                                <i class="bi bi-cpu"></i>
+                                <span>Worker-0</span>
+                            </div>
+                            <div class="arch-node worker-node" data-node="worker-1">
+                                <i class="bi bi-cpu"></i>
+                                <span>Worker-1</span>
+                            </div>
+                            <div class="arch-node worker-node" data-node="worker-2">
+                                <i class="bi bi-cpu"></i>
+                                <span>Worker-2</span>
+                            </div>
+                            <div class="arch-node worker-node" data-node="worker-n">
+                                <i class="bi bi-cpu"></i>
+                                <span>Worker-N</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- API Layer -->
+                    <div class="arch-layer api-layer">
+                        <div class="layer-title">gRPC API</div>
+                        <div class="api-methods">
+                            <span class="api-method">StartRound</span>
+                            <span class="api-method">PublishValues</span>
+                            <span class="api-method">GetValue</span>
+                            <span class="api-method">GetBaseParams</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Coordination Layer -->
+                    <div class="arch-layer coordination-layer">
+                        <div class="layer-title">Coordination Layer</div>
+                        <div class="layer-components">
+                            <div class="arch-component" data-component="round">
+                                <i class="bi bi-arrow-repeat"></i>
+                                <span>Round Manager</span>
+                            </div>
+                            <div class="arch-component" data-component="crypto">
+                                <i class="bi bi-key-fill"></i>
+                                <span>Crypto Layer</span>
+                                <div class="sub-components">
+                                    <span>OKVS</span>
+                                    <span>FrodoPIR</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Raft Layer -->
+                    <div class="arch-layer raft-layer">
+                        <div class="layer-title">Raft Consensus</div>
+                        <div class="raft-nodes">
+                            <div class="arch-node raft-node leader" data-node="leader">
+                                <i class="bi bi-star-fill"></i>
+                                <span>Leader</span>
+                            </div>
+                            <div class="arch-node raft-node" data-node="follower-1">
+                                <i class="bi bi-server"></i>
+                                <span>Follower</span>
+                            </div>
+                            <div class="arch-node raft-node" data-node="follower-2">
+                                <i class="bi bi-server"></i>
+                                <span>Follower</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="architecture-legend mt-4">
+                <div class="legend-item">
+                    <span class="legend-dot data-flow"></span>
+                    <span>Data Flow</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-dot replication"></span>
+                    <span>Raft Replication</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-dot pir-query"></span>
+                    <span>PIR Query</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Technology Section -->
+    <section id="technology" class="technology-section">
+        <div class="container">
+            <div class="section-header text-center">
+                <span class="section-tag">Under the Hood</span>
+                <h2 class="section-title">Cutting-Edge <span class="gradient-text">Technology</span></h2>
+                <p class="section-subtitle">
+                    Built with the most advanced cryptographic primitives and distributed systems techniques
+                </p>
+            </div>
+            
+            <div class="row g-4 mt-4">
+                <div class="col-lg-6">
+                    <div class="tech-card">
+                        <div class="tech-header">
+                            <div class="tech-icon-container">
+                                <i class="bi bi-eye-slash"></i>
+                            </div>
+                            <div>
+                                <h3 class="tech-title">Oblivious Key-Value Store (OKVS)</h3>
+                                <p class="tech-subtitle">Random Band Matrix Encoding</p>
+                            </div>
+                        </div>
+                        <div class="tech-content">
+                            <p>OKVS encodes key-value pairs into a single compact blob that reveals nothing about which keys were stored. Any key can be decoded from the blob, providing complete storage obliviousness.</p>
+                            <div class="tech-specs">
+                                <div class="spec-item">
+                                    <span class="spec-label">Encoding Overhead</span>
+                                    <span class="spec-value">10-20%</span>
+                                </div>
+                                <div class="spec-item">
+                                    <span class="spec-label">Key Hash</span>
+                                    <span class="spec-value">BLAKE2b512</span>
+                                </div>
+                                <div class="spec-item">
+                                    <span class="spec-label">Min Pairs</span>
+                                    <span class="spec-value">100</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-lg-6">
+                    <div class="tech-card">
+                        <div class="tech-header">
+                            <div class="tech-icon-container">
+                                <i class="bi bi-search"></i>
+                            </div>
+                            <div>
+                                <h3 class="tech-title">Private Information Retrieval (PIR)</h3>
+                                <p class="tech-subtitle">FrodoPIR with LWE Cryptography</p>
+                            </div>
+                        </div>
+                        <div class="tech-content">
+                            <p>FrodoPIR enables clients to query the database without revealing which key they're requesting. The server processes every element but learns nothing about the queried index.</p>
+                            <div class="tech-specs">
+                                <div class="spec-item">
+                                    <span class="spec-label">Security</span>
+                                    <span class="spec-value">Post-Quantum</span>
+                                </div>
+                                <div class="spec-item">
+                                    <span class="spec-label">LWE Dimension</span>
+                                    <span class="spec-value">512-1572</span>
+                                </div>
+                                <div class="spec-item">
+                                    <span class="spec-label">Latency</span>
+                                    <span class="spec-value">&lt; 10ms</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-lg-6">
+                    <div class="tech-card">
+                        <div class="tech-header">
+                            <div class="tech-icon-container">
+                                <i class="bi bi-diagram-3"></i>
+                            </div>
+                            <div>
+                                <h3 class="tech-title">Raft Consensus</h3>
+                                <p class="tech-subtitle">Distributed State Machine Replication</p>
+                            </div>
+                        </div>
+                        <div class="tech-content">
+                            <p>HashiCorp Raft provides crash fault tolerance through automatic leader election and log replication. The system remains available as long as a majority of nodes are operational.</p>
+                            <div class="tech-specs">
+                                <div class="spec-item">
+                                    <span class="spec-label">Fault Tolerance</span>
+                                    <span class="spec-value">(N-1)/2</span>
+                                </div>
+                                <div class="spec-item">
+                                    <span class="spec-label">Persistence</span>
+                                    <span class="spec-value">BoltDB</span>
+                                </div>
+                                <div class="spec-item">
+                                    <span class="spec-label">Transport</span>
+                                    <span class="spec-value">TCP</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-lg-6">
+                    <div class="tech-card">
+                        <div class="tech-header">
+                            <div class="tech-icon-container">
+                                <i class="bi bi-graph-up"></i>
+                            </div>
+                            <div>
+                                <h3 class="tech-title">LEDP Algorithms</h3>
+                                <p class="tech-subtitle">Local Edge Differential Privacy</p>
+                            </div>
+                        </div>
+                        <div class="tech-content">
+                            <p>Execute privacy-preserving graph algorithms with formal differential privacy guarantees. Supports k-core decomposition, PageRank, shortest paths, and more.</p>
+                            <div class="tech-specs">
+                                <div class="spec-item">
+                                    <span class="spec-label">Privacy</span>
+                                    <span class="spec-value">ε-DP</span>
+                                </div>
+                                <div class="spec-item">
+                                    <span class="spec-label">Noise</span>
+                                    <span class="spec-value">Geometric</span>
+                                </div>
+                                <div class="spec-item">
+                                    <span class="spec-label">Execution</span>
+                                    <span class="spec-value">Synchronous</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Use Cases Section -->
+    <section id="usecases" class="usecases-section">
+        <div class="container">
+            <div class="section-header text-center">
+                <span class="section-tag">Applications</span>
+                <h2 class="section-title">Real-World <span class="gradient-text">Use Cases</span></h2>
+                <p class="section-subtitle">
+                    Powering privacy-preserving applications across industries
+                </p>
+            </div>
+            
+            <div class="row g-4 mt-4">
+                <div class="col-md-6 col-lg-4">
+                    <div class="usecase-card">
+                        <div class="usecase-icon">
+                            <i class="bi bi-hospital"></i>
+                        </div>
+                        <h3 class="usecase-title">Healthcare Analytics</h3>
+                        <p class="usecase-text">
+                            Analyze patient data across hospitals without exposing individual records. 
+                            Enable collaborative medical research while maintaining HIPAA compliance.
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="col-md-6 col-lg-4">
+                    <div class="usecase-card">
+                        <div class="usecase-icon">
+                            <i class="bi bi-bank"></i>
+                        </div>
+                        <h3 class="usecase-title">Financial Fraud Detection</h3>
+                        <p class="usecase-text">
+                            Detect fraud patterns across financial institutions without sharing sensitive 
+                            transaction data. Preserve customer privacy while enhancing security.
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="col-md-6 col-lg-4">
+                    <div class="usecase-card">
+                        <div class="usecase-icon">
+                            <i class="bi bi-share"></i>
+                        </div>
+                        <h3 class="usecase-title">Social Network Analysis</h3>
+                        <p class="usecase-text">
+                            Compute graph metrics like influence and community detection without 
+                            revealing the underlying social connections or user behavior.
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="col-md-6 col-lg-4">
+                    <div class="usecase-card">
+                        <div class="usecase-icon">
+                            <i class="bi bi-shield-lock"></i>
+                        </div>
+                        <h3 class="usecase-title">Secure Multi-Party Computation</h3>
+                        <p class="usecase-text">
+                            Enable multiple parties to jointly compute functions over their inputs 
+                            while keeping those inputs private from each other.
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="col-md-6 col-lg-4">
+                    <div class="usecase-card">
+                        <div class="usecase-icon">
+                            <i class="bi bi-globe"></i>
+                        </div>
+                        <h3 class="usecase-title">IoT Data Aggregation</h3>
+                        <p class="usecase-text">
+                            Aggregate sensor data from distributed IoT devices while protecting 
+                            individual device readings and user behavior patterns.
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="col-md-6 col-lg-4">
+                    <div class="usecase-card">
+                        <div class="usecase-icon">
+                            <i class="bi bi-robot"></i>
+                        </div>
+                        <h3 class="usecase-title">Federated ML Coordination</h3>
+                        <p class="usecase-text">
+                            Coordinate federated learning without revealing model updates or 
+                            training data. Enable privacy-preserving collaborative AI.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Performance Section -->
+    <section id="performance" class="performance-section">
+        <div class="container">
+            <div class="section-header text-center">
+                <span class="section-tag">Benchmarks</span>
+                <h2 class="section-title">Built for <span class="gradient-text">Performance</span></h2>
+                <p class="section-subtitle">
+                    Optimized for real-world workloads with production-ready performance
+                </p>
+            </div>
+            
+            <div class="row g-4 mt-5">
+                <div class="col-md-6 col-lg-3">
+                    <div class="metric-card">
+                        <div class="metric-value" data-target="8">0</div>
+                        <div class="metric-unit">ns/op</div>
+                        <div class="metric-label">FSM Get Latency</div>
+                        <div class="metric-bar">
+                            <div class="metric-fill" style="--fill-width: 95%"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6 col-lg-3">
+                    <div class="metric-card">
+                        <div class="metric-value" data-target="150">0</div>
+                        <div class="metric-unit">M ops/sec</div>
+                        <div class="metric-label">Read Throughput</div>
+                        <div class="metric-bar">
+                            <div class="metric-fill" style="--fill-width: 90%"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6 col-lg-3">
+                    <div class="metric-card">
+                        <div class="metric-value" data-target="10">0</div>
+                        <div class="metric-unit">ms</div>
+                        <div class="metric-label">PIR Query Latency</div>
+                        <div class="metric-bar">
+                            <div class="metric-fill" style="--fill-width: 85%"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6 col-lg-3">
+                    <div class="metric-card">
+                        <div class="metric-value" data-target="99">0</div>
+                        <div class="metric-unit">%</div>
+                        <div class="metric-label">Uptime Target</div>
+                        <div class="metric-bar">
+                            <div class="metric-fill" style="--fill-width: 99%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row mt-5">
+                <div class="col-lg-8 mx-auto">
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span class="code-title">Quick Start</span>
+                            <button class="copy-btn" onclick="copyCode()">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                        <pre class="code-content"><code><span class="comment"># Clone the repository</span>
+git clone https://github.com/mundrapranay/silhouette-db.git
+cd silhouette-db
+
+<span class="comment"># Initialize submodules and build</span>
+make submodule-init
+make build
+
+<span class="comment"># Start the server with OKVS backend</span>
+./bin/silhouette-server \
+    -node-id=node1 \
+    -listen-addr=127.0.0.1:8080 \
+    -grpc-addr=127.0.0.1:9090 \
+    -data-dir=./data/node1 \
+    -bootstrap \
+    -storage-backend=okvs</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta-section">
+        <div class="container">
+            <div class="cta-content text-center">
+                <h2 class="cta-title">Ready to Build <span class="gradient-text">Privacy-First</span> Applications?</h2>
+                <p class="cta-subtitle">
+                    Join the next generation of privacy-preserving distributed systems
+                </p>
+                <div class="cta-buttons">
+                    <a href="https://github.com/mundrapranay/silhouette-db" class="btn btn-primary btn-lg" target="_blank">
+                        <i class="bi bi-github me-2"></i>Get Started
+                    </a>
+                    <a href="mailto:contact@silhouette-db.io" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-envelope me-2"></i>Contact Us
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-4 mb-4 mb-lg-0">
+                    <div class="footer-brand">
+                        <span class="brand-icon me-2">
+                            <i class="bi bi-shield-lock-fill"></i>
+                        </span>
+                        <span class="brand-text">silhouette<span class="text-accent">-db</span></span>
+                    </div>
+                    <p class="footer-description">
+                        A fault-tolerant, distributed, and oblivious coordination layer for 
+                        privacy-preserving distributed systems.
+                    </p>
+                    <div class="footer-social">
+                        <a href="https://github.com/mundrapranay/silhouette-db" target="_blank">
+                            <i class="bi bi-github"></i>
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="col-6 col-lg-2">
+                    <h5 class="footer-heading">Product</h5>
+                    <ul class="footer-links">
+                        <li><a href="#features">Features</a></li>
+                        <li><a href="#architecture">Architecture</a></li>
+                        <li><a href="#technology">Technology</a></li>
+                        <li><a href="#usecases">Use Cases</a></li>
+                    </ul>
+                </div>
+                
+                <div class="col-6 col-lg-2">
+                    <h5 class="footer-heading">Resources</h5>
+                    <ul class="footer-links">
+                        <li><a href="https://github.com/mundrapranay/silhouette-db/tree/main/guides" target="_blank">Documentation</a></li>
+                        <li><a href="https://github.com/mundrapranay/silhouette-db" target="_blank">GitHub</a></li>
+                        <li><a href="https://github.com/mundrapranay/silhouette-db/issues" target="_blank">Issues</a></li>
+                    </ul>
+                </div>
+                
+                <div class="col-lg-4">
+                    <h5 class="footer-heading">Technology Stack</h5>
+                    <div class="tech-stack">
+                        <span class="tech-badge">Go</span>
+                        <span class="tech-badge">Rust</span>
+                        <span class="tech-badge">gRPC</span>
+                        <span class="tech-badge">Raft</span>
+                        <span class="tech-badge">LWE</span>
+                        <span class="tech-badge">PIR</span>
+                        <span class="tech-badge">OKVS</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="footer-bottom">
+                <p>&copy; 2025 Pranay Mundra. Licensed under MIT License.</p>
+                <p>Built with ❤️ for privacy-preserving distributed systems</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Custom JS -->
+    <script src="js/architecture.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
+
