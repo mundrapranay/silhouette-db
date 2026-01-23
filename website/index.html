@@ -258,19 +258,19 @@
                     <div class="arch-layer workers-layer">
                         <div class="layer-title">LEDP Workers</div>
                         <div class="layer-nodes">
-                            <div class="arch-node worker-node" data-node="worker-0">
+                            <div class="arch-node worker-node" data-node="worker-0" data-tooltip="Distributed compute node running privacy-preserving graph algorithms with local data partitions">
                                 <i class="bi bi-cpu"></i>
                                 <span>Worker-0</span>
                             </div>
-                            <div class="arch-node worker-node" data-node="worker-1">
+                            <div class="arch-node worker-node" data-node="worker-1" data-tooltip="Distributed compute node running privacy-preserving graph algorithms with local data partitions">
                                 <i class="bi bi-cpu"></i>
                                 <span>Worker-1</span>
                             </div>
-                            <div class="arch-node worker-node" data-node="worker-2">
+                            <div class="arch-node worker-node" data-node="worker-2" data-tooltip="Distributed compute node running privacy-preserving graph algorithms with local data partitions">
                                 <i class="bi bi-cpu"></i>
                                 <span>Worker-2</span>
                             </div>
-                            <div class="arch-node worker-node" data-node="worker-n">
+                            <div class="arch-node worker-node" data-node="worker-n" data-tooltip="System scales horizontally with additional workers for larger workloads">
                                 <i class="bi bi-cpu"></i>
                                 <span>Worker-N</span>
                             </div>
@@ -281,10 +281,10 @@
                     <div class="arch-layer api-layer">
                         <div class="layer-title">gRPC API</div>
                         <div class="api-methods">
-                            <span class="api-method">StartRound</span>
-                            <span class="api-method">PublishValues</span>
-                            <span class="api-method">GetValue</span>
-                            <span class="api-method">GetBaseParams</span>
+                            <span class="api-method" data-tooltip="Initiates a new synchronous round for algorithm execution">StartRound</span>
+                            <span class="api-method" data-tooltip="Workers submit encrypted key-value pairs for aggregation">PublishValues</span>
+                            <span class="api-method" data-tooltip="Privacy-preserving query via PIR - server learns nothing">GetValue</span>
+                            <span class="api-method" data-tooltip="Retrieves PIR parameters for client-side encryption">GetBaseParams</span>
                         </div>
                     </div>
                     
@@ -292,16 +292,16 @@
                     <div class="arch-layer coordination-layer">
                         <div class="layer-title">Coordination Layer</div>
                         <div class="layer-components">
-                            <div class="arch-component" data-component="round">
+                            <div class="arch-component" data-component="round" data-tooltip="Orchestrates synchronous round-based execution, ensuring all workers complete each phase before proceeding">
                                 <i class="bi bi-arrow-repeat"></i>
                                 <span>Round Manager</span>
                             </div>
-                            <div class="arch-component" data-component="crypto">
+                            <div class="arch-component" data-component="crypto" data-tooltip="Cryptographic primitives providing oblivious storage and private queries">
                                 <i class="bi bi-key-fill"></i>
                                 <span>Crypto Layer</span>
                                 <div class="sub-components">
-                                    <span>OKVS</span>
-                                    <span>FrodoPIR</span>
+                                    <span data-tooltip="Oblivious Key-Value Store - hides which keys are stored">OKVS</span>
+                                    <span data-tooltip="Private Information Retrieval - query without revealing the key">FrodoPIR</span>
                                 </div>
                             </div>
                         </div>
@@ -311,15 +311,15 @@
                     <div class="arch-layer raft-layer">
                         <div class="layer-title">Raft Consensus</div>
                         <div class="raft-nodes">
-                            <div class="arch-node raft-node leader" data-node="leader">
+                            <div class="arch-node raft-node leader" data-node="leader" data-tooltip="Elected leader handles all writes and replicates to followers for fault tolerance">
                                 <i class="bi bi-star-fill"></i>
                                 <span>Leader</span>
                             </div>
-                            <div class="arch-node raft-node" data-node="follower-1">
+                            <div class="arch-node raft-node" data-node="follower-1" data-tooltip="Follower node that replicates state and can become leader if current leader fails">
                                 <i class="bi bi-server"></i>
                                 <span>Follower</span>
                             </div>
-                            <div class="arch-node raft-node" data-node="follower-2">
+                            <div class="arch-node raft-node" data-node="follower-2" data-tooltip="Follower node that replicates state and can become leader if current leader fails">
                                 <i class="bi bi-server"></i>
                                 <span>Follower</span>
                             </div>
@@ -741,7 +741,7 @@ make build
             </div>
             
             <div class="footer-bottom">
-                <p>&copy; 2025 Pranay Mundra. Licensed under MIT License.</p>
+                <p>Licensed under MIT License</p>
                 <p>Built with ❤️ for privacy-preserving distributed systems</p>
             </div>
         </div>
